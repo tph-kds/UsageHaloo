@@ -1,0 +1,12 @@
+[package]
+name = "usage-halo-connector-gemini-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+usage-halo-core = { path = "../../crates/usage-halo-core" }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- UsageHalo collector agent (macOS launchd). Install: cp to ~/Library/LaunchAgents/ then launchctl load. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.usagehalo.app</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>REPO_PATH/prototype/server.mjs</string>
+  </array>
+  <key>WorkingDirectory</key><string>REPO_PATH</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/usagehalo.out.log</string>
+  <key>StandardErrorPath</key><string>/tmp/usagehalo.err.log</string>
+</dict>
+</plist>

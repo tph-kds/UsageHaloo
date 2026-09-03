@@ -1,0 +1,63 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.11']
+        node: ['22']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions-rust-lang/rustup@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Validate project
+        run: python scripts/validate.py
+      - name: Node syntax checks
+        run: |
+          node --check demo/app.js
+          node --check collectors/local.mjs
+          node --check collectors/store.mjs
+          node --check collectors/reconcile.mjs
+          node --check collectors/scheduler.mjs
+          node --check collectors/forecast.mjs
+          node --check collectors/alerts.mjs
+          node --check collectors/providers.mjs
+          node --check collectors/codex-app-server.mjs
+          node --check collectors/gemini-otlp.mjs
+          node --check collectors/daemon.mjs
+          node --check collectors/pollers.mjs
+          node --check prototype/server.mjs
+          node --check connectors/claude-code/scripts/usage-halo-claude-bridge.mjs
+      - name: Python tests (no live third-party calls)
+        run: python -m pytest -q
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+      - name: Rust gates (fmt, clippy, tests)
+        run: |
+          cargo fmt --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+      - name: Rust keychain feature (compile + round-trip where a vault exists)
+        run: |
+          cargo check -p usage-halo-secrets --features os-keychain
+          cargo test -p usage-halo-secrets --features os-keychain
+      - name: Privacy audit (local data dir)
+        run: python scripts/privacy_audit.py
+      - name: Desktop UI gates (check, build)
+        run: |
+          cd apps/desktop-ui
+          npm ci
+          npm run check
+          npm run build

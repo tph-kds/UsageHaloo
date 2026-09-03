@@ -1,0 +1,35 @@
+{
+  "resourceMetrics": [
+    {
+      "scopeMetrics": [
+        {
+          "metrics": [
+            {
+              "name": "gemini_cli.token.usage",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      { "key": "model", "value": { "stringValue": "gemini-1.5-pro" } },
+                      { "key": "type", "value": { "stringValue": "input" } },
+                      { "key": "gen_ai.prompt.name", "value": { "stringValue": "SECRET-PROMPT-MUST-BE-DROPPED" } }
+                    ],
+                    "asInt": "500"
+                  },
+                  {
+                    "attributes": [
+                      { "key": "model", "value": { "stringValue": "gemini-1.5-pro" } },
+                      { "key": "type", "value": { "stringValue": "output" } }
+                    ],
+                    "asInt": "120"
+                  }
+                ]
+              }
+            },
+            { "name": "gemini_cli.api.request.count", "sum": { "dataPoints": [] } }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "cwd": "/private/project",
+  "session_id": "fixture-session-1",
+  "transcript_path": "/private/transcript.jsonl",
+  "version": "2.1.251",
+  "model": {"id": "claude-example", "display_name": "Claude Example"},
+  "cost": {"total_cost_usd": 0.31, "total_duration_ms": 912000},
+  "context_window": {
+    "total_input_tokens": 128000,
+    "total_output_tokens": 4300,
+    "context_window_size": 200000,
+    "used_percentage": 64,
+    "remaining_percentage": 36,
+    "current_usage": {
+      "input_tokens": 27000,
+      "output_tokens": 1300,
+      "cache_creation_input_tokens": 5000,
+      "cache_read_input_tokens": 96000
+    }
+  },
+  "rate_limits": {
+    "five_hour": {"used_percentage": 73, "resets_at": 1900000000},
+    "seven_day": {"used_percentage": 21, "resets_at": 1900500000}
+  },
+  "prompt_cache": {"warm": true, "hit_ratio": 0.91, "requests": 14, "misses": 2}
+}

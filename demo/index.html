@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-style="glass">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UsageHalo — Monitor AI usage. Stay in control.</title>
+  <meta name="description" content="A lightweight, privacy-first monitor for Claude, Codex, Gemini, and more." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-placement="left">
+  <div class="wallpaper" aria-hidden="true"></div>
+
+  <!-- Ambient edge rail -->
+  <aside class="rail glass" id="rail" aria-label="AI provider usage rail">
+    <div class="rail-grip" title="Drag rail"></div>
+    <div id="provider-stack"></div>
+    <button class="more-provider" id="more-btn" aria-label="Show all providers">+3</button>
+  </aside>
+
+  <!-- Hover / focus card -->
+  <section class="hover-card glass" id="hover-card" role="dialog" aria-live="polite" hidden></section>
+
+  <!-- Tray dropdown (Linux/Windows parity with example-ui 02/03) -->
+  <section class="tray-card glass" id="tray-card" hidden aria-label="UsageHalo tray"></section>
+
+  <div class="shell">
+    <!-- Sidebar -->
+    <aside class="sidebar glass" aria-label="Primary">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">UsageHalo</span><span class="live-pill"><i></i>Live</span></div>
+      <nav class="side-nav" id="side-nav">
+        <button data-page="overview" class="active">Overview</button>
+        <button data-page="providers">Providers</button>
+        <button data-page="models">Models</button>
+        <button data-page="activity">Activity</button>
+        <button data-page="budgets">Budgets</button>
+        <button data-page="alerts">Alerts</button>
+        <button data-page="settings">Settings</button>
+      </nav>
+      <div class="sys-live"><i class="dot live"></i><div><strong>All systems live</strong><span id="sys-live-sub">6 providers · Live</span></div></div>
+      <div class="tray-row"><button id="tray-toggle" title="Tray preview">Tray</button><button id="theme-toggle" title="Toggle light / dark">Theme</button></div>
+    </aside>
+
+    <!-- Main -->
+    <main class="dashboard glass" id="dashboard">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow" id="page-eyebrow">REAL-TIME USAGE ACROSS ALL YOUR AI PROVIDERS</div>
+          <h1 id="page-title">Overview</h1>
+          <p id="page-sub">Real-time usage across all your AI providers.</p>
+        </div>
+        <div class="toolbar">
+          <button class="select" id="range-btn">This week ▾</button>
+          <button class="select ghost" id="share-btn">Share</button>
+          <button class="icon-btn" id="tray-btn" title="Tray">◈</button>
+        </div>
+      </header>
+
+      <div class="sample-banner" id="sample-banner" hidden></div>
+
+      <!-- OVERVIEW -->
+      <section data-view="overview">
+        <div class="summary-grid" id="summary-grid"></div>
+        <div class="content-grid">
+          <article class="panel span-7">
+            <div class="panel-head"><div><div class="eyebrow">ACTIVITY</div><h2>Activity Heatmap</h2></div>
+              <select id="heatmap-metric" aria-label="Heatmap metric"><option value="tokens">Tokens</option><option value="cost">Cost</option><option value="requests">Requests</option></select></div>
+            <div class="heatmap-wrap"><div class="week-labels"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="heatmap" id="heatmap"></div></div>
+            <div class="time-labels"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span></div>
+            <div class="legend"><span>Tokens&nbsp;&nbsp;Less</span><i data-l="0"></i><i data-l="1"></i><i data-l="2"></i><i data-l="3"></i><i data-l="4"></i><span>More</span></div>
+          </article>
+          <article class="panel span-5">
+            <div class="eyebrow">BREAKDOWN</div><h2>Usage by Provider</h2>
+            <div id="provider-bars"></div>
+          </article>
+          <article class="panel span-5">
+            <div class="eyebrow">BUDGET</div><h2>Budget vs Actual</h2>
+            <div class="budget-top"><strong>$12.47 <span>/ $20.00</span></strong><span class="pct">62%</span></div>
+            <div class="progress xl"><span id="budget-bar" style="width:62%"></span></div>
+            <div class="bars" id="budget-bars"></div>
+            <div class="time-labels small"><span>8/21</span><span>8/22</span><span>8/23</span><span>8/24</span><span>8/25</span><span>8/26</span><span>8/27</span></div>
+          </article>
+          <article class="panel span-7">
+            <div class="panel-head"><div><div class="eyebrow">MODELS</div><h2>Model Breakdown</h2></div><button class="link" data-goto="models">→</button></div>
+            <div id="model-table"></div>
+          </article>
+          <article class="panel span-5">
+            <div class="panel-head"><div><h2>Recent Alerts</h2></div><button class="link" data-goto="alerts">View all</button></div>
+            <div id="alert-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- PROVIDERS -->
+      <section data-view="providers" hidden>
+        <div class="provider-grid" id="provider-grid"></div>
+        <article class="panel"><div class="eyebrow">HEALTH</div><h2>Connector health</h2><div id="health-list"></div></article>
+      </section>
+
+      <!-- MODELS -->
+      <section data-view="models" hidden>
+        <article class="panel"><div class="eyebrow">BILLING OWNER INVARIANT</div><h2>Today's model activity</h2>
+        <p class="muted">A Claude model used inside Cursor is Cursor-billed usage, not direct Anthropic usage. Provider-reported and estimated cost are kept separate.</p>
+        <div id="model-table-full"></div></article>
+      </section>
+
+      <!-- ACTIVITY -->
+      <section data-view="activity" hidden>
+        <article class="panel"><div class="panel-head"><div><div class="eyebrow">ACTIVITY</div><h2>Daily AI activity</h2></div>
+        <select id="heatmap-metric-2" aria-label="Heatmap metric"><option value="tokens">Tokens</option><option value="cost">Cost</option><option value="requests">Requests</option></select></div>
+        <div class="heatmap-wrap"><div class="week-labels"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="heatmap" id="heatmap-2"></div></div>
+        <div class="time-labels"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span></div></article>
+      </section>
+
+      <!-- BUDGETS -->
+      <section data-view="budgets" hidden>
+        <div class="budget-cards" id="budget-cards"></div>
+      </section>
+
+      <!-- ALERTS -->
+      <section data-view="alerts" hidden>
+        <article class="panel"><div class="eyebrow">NOTIFICATIONS</div><h2>Alerts</h2><div id="alert-list-full"></div></article>
+      </section>
+
+      <!-- SETTINGS (example-ui 04 parity) -->
+      <section data-view="settings" hidden>
+        <div class="settings-head">
+          <div><h2 class="settings-title">Settings</h2><p class="muted">Configure UsageHalo to monitor and manage your AI usage.</p></div>
+          <div class="settings-actions"><input id="settings-search" placeholder="Search settings…  ⌘K" /><button class="primary">Save Changes</button></div>
+        </div>
+        <div class="settings-tabs" id="settings-tabs">
+          <button class="active">Providers</button><button>Appearance</button><button>Alerts</button><button>Budgets</button><button>Data Sources</button><button>Privacy</button>
+        </div>
+        <p class="muted">Connect and configure your AI providers. Customize how each provider appears in your primary ring.</p>
+        <div class="provider-grid" id="settings-provider-grid"></div>
+        <div class="settings-grid">
+          <article class="panel"><div class="eyebrow">APPEARANCE</div><h2>Appearance</h2><p class="muted">Choose how UsageHalo looks and feels.</p>
+            <div class="seg-label">Style</div>
+            <div class="seg" id="style-seg"><button data-style="glass" class="active">Glass</button><button data-style="solid">Solid</button><button data-style="minimal">Minimal</button><button data-style="mono">Monochrome</button></div>
+            <div class="seg-label">Theme</div>
+            <div class="seg" id="theme-seg"><button data-theme="light">Light</button><button data-theme="dark" class="active">Dark</button><button data-theme="system">System</button></div>
+          </article>
+          <article class="panel"><div class="eyebrow">PLACEMENT</div><h2>Placement</h2><p class="muted">Choose where UsageHalo appears on your screen.</p>
+            <div class="seg wrap" id="placement-seg"><button data-placement="left" class="active">Left Edge</button><button data-placement="right">Right Edge</button><button data-placement="top">Top Edge</button><button data-placement="bottom">Bottom Edge</button></div>
+          </article>
+          <article class="panel"><div class="eyebrow">RING</div><h2>Primary Ring Metric Behavior</h2>
+            <div class="kv"><span>Aggregation</span><select><option>Combined across all providers</option><option>Per provider</option></select></div>
+            <div class="kv"><span>Metric priority</span><div class="chips"><button class="chip active">Quota %</button><button class="chip">Token usage</button><button class="chip">Cost (USD)</button><button class="chip">Credits</button></div></div>
+            <label class="check"><input type="checkbox" checked /> Show estimated values when available</label>
+          </article>
+          <article class="panel"><div class="eyebrow">ALERTS</div><h2>Alerts</h2><div id="settings-alerts"></div><button class="link">+ Add Alert</button></article>
+          <article class="panel"><div class="eyebrow">BUDGETS</div><h2>Budgets</h2><div id="settings-budgets"></div><button class="link">+ Add Budget</button></article>
+          <article class="panel"><div class="eyebrow">SOURCES</div><h2>Data Sources</h2><div id="settings-sources"></div></article>
+          <article class="panel"><div class="eyebrow">PRIVACY</div><h2>Privacy</h2>
+            <div class="kv"><span>Telemetry<br /><small>Help improve UsageHalo</small></span><button class="toggle on" aria-label="telemetry"></button></div>
+            <div class="kv"><span>Usage Analytics<br /><small>Collect anonymous usage data</small></span><button class="toggle on" aria-label="analytics"></button></div>
+            <div class="kv"><span>Data Retention<br /><small>Keep data for 30 days</small></span><span>›</span></div>
+            <div class="kv"><span>Privacy Policy</span><span>›</span></div>
+            <p class="muted small">Secrets stay in the OS keychain. Prompts and completions are never stored. Request instrumentation is strictly opt-in.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Mobile">
+    <button data-page="overview" class="active">Overview</button>
+    <button data-page="providers">Providers</button>
+    <button data-page="activity">Activity</button>
+    <button data-page="budgets">Budgets</button>
+    <button data-page="settings">Settings</button>
+  </nav>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

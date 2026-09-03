@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "skills": {
+    "planonce-brown-large": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-brown-large/SKILL.md",
+      "computedHash": "50a61dbe4eab38ee5daa1d571c2401fa5156e672bbfc9d9f7239190e88bf4f96"
+    },
+    "planonce-brown-normal": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-brown-normal/SKILL.md",
+      "computedHash": "ba94b1bb279bdab915364366563776f8fec67cc7bbd5392257e96d64fa295840"
+    },
+    "planonce-brown-small": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-brown-small/SKILL.md",
+      "computedHash": "b9858ed35fd6f106d6852f049d86ba8c52bc70ac76792a1791d5102e308a5296"
+    },
+    "planonce-green-large": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-green-large/SKILL.md",
+      "computedHash": "2664710aca75e2c994d26ad8139cba32831e6a4e5df3c37e6a1c8757a629ee2b"
+    },
+    "planonce-green-normal": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-green-normal/SKILL.md",
+      "computedHash": "9e0db4952a852640b492f8de56e7d459ca113e6e188567bc6f99e05adbcf5d46"
+    },
+    "planonce-green-small": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-green-small/SKILL.md",
+      "computedHash": "a72ac52d7fc49a34e717ca8b5a56d4f35d4abfaf533fd25657572adb90e5bb98"
+    },
+    "planonce-init": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-init/SKILL.md",
+      "computedHash": "ad64427adcff03317d68aecac6014b2a67d161c34240b71713f71505df565b36"
+    },
+    "planonce-review": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-review/SKILL.md",
+      "computedHash": "021284a557e07cc8e34e1e12b43ca9b4c0171a4532ece951d34e4a0b6dc81017"
+    },
+    "planonce-security": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-security/SKILL.md",
+      "computedHash": "ea3a4174be54ac57e1118477b37a5a34e13018247bc8c48ef2982c43b0efbd21"
+    },
+    "planonce-security-fix": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-security-fix/SKILL.md",
+      "computedHash": "9f371132ddf055ebdf885f506094477c68ccaf58db520973935642fa069dd9cc"
+    },
+    "planonce-skill-audit": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-skill-audit/SKILL.md",
+      "computedHash": "bc3c1d3c0bb209a5335f41c60f839fd74a0f7eda7e0d30807437ba7d543f0d0d"
+    },
+    "planonce-task": {
+      "source": "tph-kds/PlanOnce",
+      "sourceType": "github",
+      "skillPath": "skills/planonce-task/SKILL.md",
+      "computedHash": "d758f9a0f9a86a23a83fa2e41de94aae98bb8c2cb33d096dc1e8437282ff3742"
+    }
+  }
+}

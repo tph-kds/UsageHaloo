@@ -1,0 +1,19 @@
+# UsageHalo collector service (Linux systemd --user).
+# Install: mkdir -p ~/.config/systemd/user && cp usagehalo.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now usagehalo
+[Unit]
+Description=UsageHalo local usage collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/SideProjects/UsageHaloo
+ExecStart=/usr/bin/node prototype/server.mjs
+Restart=on-failure
+RestartSec=5
+# Wayland fallback is handled in-app (tray-only mode); no display assumptions here.
+Environment=VIUSAGEVER_PORT=4897
+
+[Install]
+WantedBy=default.target

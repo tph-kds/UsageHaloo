@@ -1,0 +1,47 @@
+{
+  "_comment": "Shared reconciliation vectors. Both crates/usage-halo-reconcile (Rust) and collectors/reconcile.mjs (JS) must select the same winner: provider_billing cost wins, instrumented token detail is preserved.",
+  "cases": [
+    {
+      "name": "billing_wins_without_losing_local_token_detail",
+      "events": [
+        {
+          "key": "openrouter:req-1", "authority": "instrumented_response",
+          "input_tokens": 5000, "output_tokens": null,
+          "provider_cost": null, "estimated_cost": 0.02
+        },
+        {
+          "key": "openrouter:req-1", "authority": "provider_billing",
+          "input_tokens": null, "output_tokens": null,
+          "provider_cost": 0.0198, "estimated_cost": 0.02
+        }
+      ],
+      "expected": {
+        "count": 1,
+        "provider_cost": 0.0198,
+        "input_tokens": 5000,
+        "winning_authority": "provider_billing"
+      }
+    },
+    {
+      "name": "unkeyed_events_are_never_merged",
+      "events": [
+        {
+          "key": null, "authority": "estimated",
+          "input_tokens": 100, "output_tokens": null,
+          "provider_cost": null, "estimated_cost": 0.01
+        },
+        {
+          "key": null, "authority": "estimated",
+          "input_tokens": 200, "output_tokens": null,
+          "provider_cost": null, "estimated_cost": 0.02
+        }
+      ],
+      "expected": {
+        "count": 2,
+        "provider_cost": null,
+        "input_tokens": null,
+        "winning_authority": null
+      }
+    }
+  ]
+}

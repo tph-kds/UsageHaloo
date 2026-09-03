@@ -1,0 +1,10 @@
+{
+  "name": "UsageHalo",
+  "short_name": "UsageHalo",
+  "description": "Ambient, local-first AI usage observability.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090a0c",
+  "theme_color": "#090a0c",
+  "icons": []
+}

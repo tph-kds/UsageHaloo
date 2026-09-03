@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "UsageHalo",
+  "version": "0.1.0",
+  "identifier": "dev.usagehalo.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "trayIcon": { "iconPath": "icons/32x32.png", "iconAsTemplate": true, "menuOnLeftClick": true },
+    "windows": [
+      {
+        "label": "main",
+        "title": "UsageHalo",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 900,
+        "minHeight": 640,
+        "resizable": true,
+        "transparent": true,
+        "decorations": true,
+        "center": true
+      },
+      {
+        "label": "rail",
+        "title": "UsageHalo Rail",
+        "width": 110,
+        "height": 560,
+        "minWidth": 84,
+        "minHeight": 300,
+        "maxWidth": 420,
+        "maxHeight": 900,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": true,
+        "x": 24,
+        "y": 120
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: data: http://127.0.0.1:4897; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4897"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "category": "Utility",
+    "shortDescription": "Ambient, local-first AI usage observability.",
+    "longDescription": "UsageHalo surfaces the freshest trustworthy usage data each provider exposes — quotas, tokens, costs, context pressure — with full provenance. Local-first, no transcript collection, secrets in OS keychain.",
+    "macOS": { "minimumSystemVersion": "11.0", "exceptionDomain": "" },
+    "windows": { "certificateThumbprint": null, "digestAlgorithm": "sha256", "timestampUrl": "" },
+    "linux": { "deb": { "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"] }, "appimage": { "bundleMediaFramework": true } }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://example.invalid/usagehalo/updates/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFQzYxQTg3MjAzMzNBMDcKUldRSE9qTWdoeHJHbmwwSWZSVThJUGU1YjErQ05aNk9qMmtjS25OK01ZZ1dqbFNIWlkyNXpVQ0cK"
+    }
+  }
+}

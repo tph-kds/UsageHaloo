@@ -1,0 +1,43 @@
+# PlanOnce project policy. Keep this small, explicit, and repository-specific.
+workflow:
+  require_human_plan_gate: true
+  require_human_ship_gate: true
+  large_changes_require_phase_gates: true
+
+review:
+  small: lightweight
+  normal: required
+  large: required
+  block_on: [P0, P1]
+  allow_ready_with_backlog: true
+
+security:
+  large: required
+  normal: risk-triggered
+  small: risk-triggered
+  triggers:
+    - authentication
+    - authorization
+    - tenant-isolation
+    - credentials-or-secrets
+    - payment-or-financial-correctness
+    - destructive-data-operation
+    - public-trust-boundary
+    - untrusted-input-or-content
+    - external-action-authority
+    - ai-mcp-tool-boundary
+
+external_tools:
+  auto_install: false
+  network_default: ask
+  untrusted_repo_execution: sandbox-first
+
+reliability:
+  artifact_schema: planonce-v1
+  approved_plan_digest: required-normal-large
+  revision_bound_evidence: true
+
+workspace:
+  preserve_preexisting_changes: true
+  prefer_isolation_large: true
+  cooperative_scope_locks_for_parallel_work: true

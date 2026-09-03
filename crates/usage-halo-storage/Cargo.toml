@@ -1,0 +1,16 @@
+[package]
+name = "usage-halo-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+usage-halo-core = { path = "../usage-halo-core" }
+
+[dev-dependencies]
+tokio.workspace = true

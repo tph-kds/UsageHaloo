@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "UsageHalo desktop capabilities: main dashboard + ambient rail and tray. Plugin capabilities (notification, autostart, store, single-instance, global-shortcut, os) are added together with their crates when each surface is wired.",
+  "windows": ["main", "rail"],
+  "permissions": [
+    "core:default",
+    "core:tray:default",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "updater:default"
+  ]
+}

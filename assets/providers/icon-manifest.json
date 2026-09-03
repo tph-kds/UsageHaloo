@@ -1,0 +1,398 @@
+{
+  "generated_on": "2026-09-02",
+  "provider_count": 24,
+  "asset_policy": {
+    "monochrome": "#111111 in light mode, #FFFFFF in dark mode",
+    "brand_color": "preserve vendor/product brand colors in both themes",
+    "default_svg": "same as light SVG for backward compatibility",
+    "png": "512x512 transparent RGBA"
+  },
+  "baseline": "Lobe Icons static vectors 1.94.0 where appropriate, cross-checked against current official product/brand pages.",
+  "important_note": "Brand names/logos remain trademarks of their respective owners. MIT applies to Lobe Icons implementation assets, not to third-party trademark rights.",
+  "providers": [
+    {
+      "id": "zai",
+      "display_name": "Z.ai",
+      "base_stem": "zai",
+      "mode": "mono",
+      "provenance": "Lobe Icons / current Z.ai symbol",
+      "source_url": "https://github.com/lobehub/lobe-icons",
+      "files": [
+        "zai/zai.svg",
+        "zai/zai-light.svg",
+        "zai/zai-dark.svg",
+        "zai/zai-light.png",
+        "zai/zai-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "vertex-ai",
+      "display_name": "Vertex AI",
+      "base_stem": "vertex-ai",
+      "mode": "color",
+      "provenance": "Google Cloud product identity; current Lobe Icons vector",
+      "source_url": "https://cloud.google.com/icons",
+      "files": [
+        "vertex-ai/vertex-ai.svg",
+        "vertex-ai/vertex-ai-light.svg",
+        "vertex-ai/vertex-ai-dark.svg",
+        "vertex-ai/vertex-ai-light.png",
+        "vertex-ai/vertex-ai-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "litellm",
+      "display_name": "LiteLLM",
+      "base_stem": "litellm",
+      "mode": "adapted",
+      "provenance": "Official LiteLLM homepage + repository motif; compact vector adapted for this pack",
+      "source_url": "https://www.litellm.ai/",
+      "files": [
+        "litellm/litellm.svg",
+        "litellm/litellm-light.svg",
+        "litellm/litellm-dark.svg",
+        "litellm/litellm-light.png",
+        "litellm/litellm-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "github-copilot",
+      "display_name": "GitHub Copilot",
+      "base_stem": "github-copilot",
+      "mode": "mono",
+      "provenance": "Current GitHub Copilot product glyph via Lobe Icons",
+      "source_url": "https://github.com/features/copilot",
+      "files": [
+        "github-copilot/github-copilot.svg",
+        "github-copilot/github-copilot-light.svg",
+        "github-copilot/github-copilot-dark.svg",
+        "github-copilot/github-copilot-light.png",
+        "github-copilot/github-copilot-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "claude-code",
+      "display_name": "Claude Code",
+      "base_stem": "claude-code",
+      "mode": "color",
+      "provenance": "Claude Code product-specific terminal glyph via current Lobe Icons",
+      "source_url": "https://www.anthropic.com/claude-code",
+      "files": [
+        "claude-code/claude-code.svg",
+        "claude-code/claude-code-light.svg",
+        "claude-code/claude-code-dark.svg",
+        "claude-code/claude-code-light.png",
+        "claude-code/claude-code-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "windsurf",
+      "display_name": "Windsurf",
+      "base_stem": "windsurf",
+      "mode": "mono",
+      "provenance": "Windsurf standalone symbol; black/white theme-safe",
+      "source_url": "https://windsurf.com/brand",
+      "files": [
+        "windsurf/windsurf.svg",
+        "windsurf/windsurf-light.svg",
+        "windsurf/windsurf-dark.svg",
+        "windsurf/windsurf-light.png",
+        "windsurf/windsurf-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "codex",
+      "display_name": "Codex",
+      "base_stem": "codex",
+      "mode": "color",
+      "provenance": "Codex product glyph / current Lobe Icons color vector",
+      "source_url": "https://openai.com/codex/",
+      "files": [
+        "codex/codex.svg",
+        "codex/codex-light.svg",
+        "codex/codex-dark.svg",
+        "codex/codex-light.png",
+        "codex/codex-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "together",
+      "display_name": "Together AI",
+      "base_stem": "together",
+      "mode": "color",
+      "provenance": "Together AI current three-node brand mark",
+      "source_url": "https://www.together.ai/",
+      "files": [
+        "together/together.svg",
+        "together/together-light.svg",
+        "together/together-dark.svg",
+        "together/together-light.png",
+        "together/together-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "ollama",
+      "display_name": "Ollama",
+      "base_stem": "ollama",
+      "mode": "mono",
+      "provenance": "Ollama llama glyph",
+      "source_url": "https://github.com/ollama/ollama",
+      "files": [
+        "ollama/ollama.svg",
+        "ollama/ollama-light.svg",
+        "ollama/ollama-dark.svg",
+        "ollama/ollama-light.png",
+        "ollama/ollama-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "xai",
+      "display_name": "xAI",
+      "base_stem": "xai",
+      "mode": "mono",
+      "provenance": "xAI current symbol",
+      "source_url": "https://x.ai/",
+      "files": [
+        "xai/xai.svg",
+        "xai/xai-light.svg",
+        "xai/xai-dark.svg",
+        "xai/xai-light.png",
+        "xai/xai-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "openrouter",
+      "display_name": "OpenRouter",
+      "base_stem": "openrouter",
+      "mode": "mono",
+      "provenance": "OpenRouter refreshed 2026 geometric OR identity",
+      "source_url": "https://openrouter.ai/",
+      "files": [
+        "openrouter/openrouter.svg",
+        "openrouter/openrouter-light.svg",
+        "openrouter/openrouter-dark.svg",
+        "openrouter/openrouter-light.png",
+        "openrouter/openrouter-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "cursor",
+      "display_name": "Cursor",
+      "base_stem": "cursor",
+      "mode": "mono",
+      "provenance": "Cursor official/current standalone mark",
+      "source_url": "https://cursor.com/brand",
+      "files": [
+        "cursor/cursor.svg",
+        "cursor/cursor-light.svg",
+        "cursor/cursor-dark.svg",
+        "cursor/cursor-light.png",
+        "cursor/cursor-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "aws",
+      "display_name": "Amazon Bedrock",
+      "base_stem": "aws-bedrock",
+      "mode": "color",
+      "provenance": "Amazon Bedrock product icon, not generic AWS logo",
+      "source_url": "https://aws.amazon.com/bedrock/",
+      "files": [
+        "aws/aws-bedrock.svg",
+        "aws/aws-bedrock-light.svg",
+        "aws/aws-bedrock-dark.svg",
+        "aws/aws-bedrock-light.png",
+        "aws/aws-bedrock-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "cerebras",
+      "display_name": "Cerebras",
+      "base_stem": "cerebras",
+      "mode": "mixed",
+      "provenance": "Cerebras orange mark + theme-sensitive secondary symbol",
+      "source_url": "https://www.cerebras.ai/",
+      "files": [
+        "cerebras/cerebras.svg",
+        "cerebras/cerebras-light.svg",
+        "cerebras/cerebras-dark.svg",
+        "cerebras/cerebras-light.png",
+        "cerebras/cerebras-dark.png"
+      ],
+      "theme_note": "mixed brand + theme-sensitive foreground"
+    },
+    {
+      "id": "lmStudio",
+      "display_name": "LM Studio",
+      "base_stem": "lm-studio",
+      "mode": "mono",
+      "provenance": "LM Studio current stacked-line glyph",
+      "source_url": "https://lmstudio.ai/",
+      "files": [
+        "lmStudio/lm-studio.svg",
+        "lmStudio/lm-studio-light.svg",
+        "lmStudio/lm-studio-dark.svg",
+        "lmStudio/lm-studio-light.png",
+        "lmStudio/lm-studio-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "groq",
+      "display_name": "Groq",
+      "base_stem": "groq",
+      "mode": "mono",
+      "provenance": "Groq current standalone G mark",
+      "source_url": "https://groq.com/",
+      "files": [
+        "groq/groq.svg",
+        "groq/groq-light.svg",
+        "groq/groq-dark.svg",
+        "groq/groq-light.png",
+        "groq/groq-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "gemini-cli",
+      "display_name": "Gemini CLI",
+      "base_stem": "gemini-cli",
+      "mode": "color",
+      "provenance": "Gemini CLI product-specific terminal tile",
+      "source_url": "https://github.com/google-gemini/gemini-cli",
+      "files": [
+        "gemini-cli/gemini-cli.svg",
+        "gemini-cli/gemini-cli-light.svg",
+        "gemini-cli/gemini-cli-dark.svg",
+        "gemini-cli/gemini-cli-light.png",
+        "gemini-cli/gemini-cli-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "deepseek",
+      "display_name": "DeepSeek",
+      "base_stem": "deepseek",
+      "mode": "color",
+      "provenance": "DeepSeek blue whale mark",
+      "source_url": "https://www.deepseek.com/",
+      "files": [
+        "deepseek/deepseek.svg",
+        "deepseek/deepseek-light.svg",
+        "deepseek/deepseek-dark.svg",
+        "deepseek/deepseek-light.png",
+        "deepseek/deepseek-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "azure",
+      "display_name": "Azure AI / Azure OpenAI",
+      "base_stem": "azure-openai",
+      "mode": "color",
+      "provenance": "Azure AI product identity, not generic Azure triangle",
+      "source_url": "https://learn.microsoft.com/azure/architecture/icons/",
+      "files": [
+        "azure/azure-openai.svg",
+        "azure/azure-openai-light.svg",
+        "azure/azure-openai-dark.svg",
+        "azure/azure-openai-light.png",
+        "azure/azure-openai-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "anthropic",
+      "display_name": "Anthropic API",
+      "base_stem": "anthropic-api",
+      "mode": "mono",
+      "provenance": "Anthropic standalone symbol",
+      "source_url": "https://www.anthropic.com/",
+      "files": [
+        "anthropic/anthropic-api.svg",
+        "anthropic/anthropic-api-light.svg",
+        "anthropic/anthropic-api-dark.svg",
+        "anthropic/anthropic-api-light.png",
+        "anthropic/anthropic-api-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "perplexity",
+      "display_name": "Perplexity",
+      "base_stem": "perplexity",
+      "mode": "color",
+      "provenance": "Perplexity cyan geometric symbol",
+      "source_url": "https://www.perplexity.ai/",
+      "files": [
+        "perplexity/perplexity.svg",
+        "perplexity/perplexity-light.svg",
+        "perplexity/perplexity-dark.svg",
+        "perplexity/perplexity-light.png",
+        "perplexity/perplexity-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "fireworks",
+      "display_name": "Fireworks AI",
+      "base_stem": "fireworks",
+      "mode": "color",
+      "provenance": "Fireworks AI purple mark",
+      "source_url": "https://fireworks.ai/",
+      "files": [
+        "fireworks/fireworks.svg",
+        "fireworks/fireworks-light.svg",
+        "fireworks/fireworks-dark.svg",
+        "fireworks/fireworks-light.png",
+        "fireworks/fireworks-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    },
+    {
+      "id": "openai",
+      "display_name": "OpenAI API",
+      "base_stem": "openai-api",
+      "mode": "mono",
+      "provenance": "OpenAI blossom symbol",
+      "source_url": "https://openai.com/brand/",
+      "files": [
+        "openai/openai-api.svg",
+        "openai/openai-api-light.svg",
+        "openai/openai-api-dark.svg",
+        "openai/openai-api-light.png",
+        "openai/openai-api-dark.png"
+      ],
+      "theme_note": "light/dark SVGs differ by foreground color"
+    },
+    {
+      "id": "mistral",
+      "display_name": "Mistral AI",
+      "base_stem": "mistral",
+      "mode": "color",
+      "provenance": "Mistral current pixel-gradient symbol",
+      "source_url": "https://mistral.ai/",
+      "files": [
+        "mistral/mistral.svg",
+        "mistral/mistral-light.svg",
+        "mistral/mistral-dark.svg",
+        "mistral/mistral-light.png",
+        "mistral/mistral-dark.png"
+      ],
+      "theme_note": "brand colors are intentionally preserved across light/dark themes"
+    }
+  ]
+}

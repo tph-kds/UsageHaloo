@@ -1,0 +1,69 @@
+name: release
+# Per-OS packaging. Updater artifacts are signed with TAURI_SIGNING_PRIVATE_KEY;
+# the matching pubkey lives in apps/desktop-ui/src-tauri/tauri.conf.json.
+# Generate a pair locally (private key NEVER enters the repo):
+#   npm run tauri signer generate -w ~/.tauri/usagehalo-update.key
+# Windows Authenticode additionally uses WINDOWS_CERT_* secrets when present
+# (self-signed pipeline proof is documented in docs/11_TESTING_RELEASE.md);
+# macOS notarization needs APPLE_* secrets.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+jobs:
+  package:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            args: ''
+          - os: macos-latest
+            args: ''
+          - os: ubuntu-latest
+            args: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions-rust-lang/rustup@v1
+        with:
+          toolchain: stable
+      - name: Install Linux webkit deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Build frontend
+        run: |
+          cd apps/desktop-ui
+          npm ci
+          npm run check
+          npm run build
+      - name: Import Windows signing cert
+        if: runner.os == 'Windows' && secrets.WINDOWS_CERT_BASE64 != ''
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String('${{ secrets.WINDOWS_CERT_BASE64 }}'))
+          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString '${{ secrets.WINDOWS_CERT_PASSWORD }}' -AsPlainText -Force)
+        shell: pwsh
+      - name: Tauri build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: apps/desktop-ui
+          tagName: ${{ github.ref_name }}
+          releaseName: 'UsageHalo ${{ github.ref_name }}'
+          releaseBody: 'See VERIFICATION.md for gate status.'
+          releaseDraft: true
+          prerelease: false

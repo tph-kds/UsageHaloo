@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="LiteLLM">
+  <title>LiteLLM</title>
+  <defs><linearGradient id="lite-blue" x1="2" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse"><stop stop-color="#2563EB"/><stop offset=".55" stop-color="#0EA5E9"/><stop offset="1" stop-color="#67E8F9"/></linearGradient></defs>
+  <path d="M4.25 17.9C5.2 13.6 7.2 9.3 10.55 5.25c1.37-1.65 3.72-2.35 5.77-1.72 1.22.37 2.25 1.14 3.02 2.22L21 8.08c.4.57.1 1.36-.58 1.53l-4.1 1.03-2.46 5.55 3.22.02c.6 0 1.03.57.86 1.14l-.42 1.4a1 1 0 01-.96.71H5.45c-.78 0-1.37-.72-1.2-1.56z" fill="url(#lite-blue)"/>
+  <path d="M10.85 8.2c1.17-1.25 2.3-1.87 3.45-1.87 1.18 0 2.18.54 3.08 1.65l-4.83 1.17-1.7-.95z" fill="#E0F2FE" fill-opacity=".96"/>
+  <path d="M7.05 14.8h5.17l-1.06 2.17H6.42c.16-.72.37-1.45.63-2.17z" fill="#FFFFFF" fill-opacity=".9"/>
+  <circle cx="8.25" cy="19.55" r="1.25" fill="#0F172A"/><circle cx="15.45" cy="19.55" r="1.25" fill="#0F172A"/>
+</svg>

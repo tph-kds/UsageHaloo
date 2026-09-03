@@ -1,0 +1,27 @@
+{
+  "_comment": "Shared forecast vectors consumed by collectors/forecast.mjs (pytest) and crates/usage-halo-forecast (cargo test). Deterministic EWMA with alpha 0.35.",
+  "ewma_alpha": 0.35,
+  "ewma_series": [8.0, 9.0, 11.0, 10.0, 12.0],
+  "ewma_expected": 10.39474375,
+  "quota": {
+    "used_percent": 73.0,
+    "hours_left": 2.0,
+    "recent_burn_per_hour": [8.0, 9.0, 11.0, 10.0, 12.0],
+    "min_samples": 3,
+    "expected_projected_at_reset": 93.8,
+    "expected_label_kind": "projected"
+  },
+  "quota_suppressed_few_samples": {
+    "used_percent": 73.0,
+    "hours_left": 2.0,
+    "recent_burn_per_hour": [8.0],
+    "min_samples": 3,
+    "expected_suppressed": true
+  },
+  "spend": {
+    "daily_costs": [2.1, 2.4, 1.9, 2.8],
+    "days_in_month": 30,
+    "min_samples": 3,
+    "expected_suppressed": false
+  }
+}

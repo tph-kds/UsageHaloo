@@ -1,0 +1,25 @@
+[package]
+name = "usage-halo-secrets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# NOTE: keyring 3.x has no `default` feature — platform backends must be
+# enabled explicitly per target, otherwise Entry::new silently falls back to
+# a per-entry in-memory mock (set-then-get across handles returns NoEntry).
+# A regression test (fresh handle per operation) guards this.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", optional = true, features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", optional = true, features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", optional = true, features = ["linux-native-sync-persistent", "crypto-rust"] }
+
+[features]
+default = []
+# OS-native credential vault (Windows Credential Manager, macOS Keychain,
+# Linux Secret Service/keyutils) via the `keyring` crate. Off by default so
+# the core workspace builds without platform vault code; enable for release.
+os-keychain = ["dep:keyring"]

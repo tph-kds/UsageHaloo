@@ -1,0 +1,51 @@
+global:
+  provenance-and-metrics:
+    file: provenance-and-metrics.md
+    summary: Every usage value carries provenance (source_kind/scope/authority/freshness/observed_at/confidence) and a typed MetricKind; never collapse quotas/tokens/credits/cost/context pressure into a fake percentage.
+    use_when: Adding or reviewing a metric, connector snapshot, or UI badge; you need to decide whether something deserves a new MetricKind or a new SourceAuthority tier.
+  security-and-privacy:
+    file: security-and-privacy.md
+    summary: No secrets, prompts, responses, transcripts, or workspace paths in SQLite; secrets only as secret_alias in OS keychain; Claude bridge allowlist sanitization before inbox.
+    use_when: Touching storage migrations, connector sanitizers, keychain alias flow, or any feature that ingests user content (status-line, OTLP payloads, response instrumentation).
+  reconciliation:
+    file: reconciliation.md
+    summary: Reconcile only on explicit reconciliation_key or billing_owner:request_id; unkeyed events are preserved unsummed; winner is higher SourceAuthority then newer observed_at; merge preserves token detail + billing cost.
+    use_when: Designing or changing the reconciler, dedupe behavior, rollup primary key, or anything that combines multiple sources for the same request.
+  billing-owner-invariant:
+    file: billing-owner-invariant.md
+    summary: billing_owner and model_provider are independent; the routing product (e.g., Cursor, OpenRouter) bills even when it serves another vendor's model.
+    use_when: Populating UsageEvent fields from a new connector, defining rollup keys, or building cost dashboards.
+
+backend:
+  connector-contract:
+    file: connector-contract.md
+    summary: Every connector implements UsageConnector (id, capabilities, snapshot, health), declares ConnectorCapabilities, and reports one of the eight ConnectorHealth states; no direct UI mutation.
+    use_when: Adding or refactoring a connector under connectors/*, wiring a new provider into the registry, or designing Tauri commands.
+  freshness-and-polling:
+    file: freshness-and-polling.md
+    summary: Freshness is explicit per connector (Live/Fresh/Hourly/Daily/Manual/Stale/Unknown); event-driven preferred; poll cadence lives in connector metadata; forecasts must be visually distinct.
+    use_when: Choosing event vs. poll, setting expected_refresh_seconds, designing the UI for delayed or estimated values, or wiring a new poll loop.
+
+frontend:
+  ui-mock-vs-live:
+    file: ui-mock-vs-live.md
+    summary: (Reserved) apps/desktop-ui currently consumes a lib/mock.ts fixture layer; live snapshots should flow through Tauri commands not direct SQLite, and must keep the primary metric label distinct from reconciled value.
+    use_when: Replacing the mock layer with real snapshots, or reviewing how a new UI element distinguishes live vs. estimated vs. reconciled.
+
+database:
+  storage-immutable-inserts:
+    file: storage-immutable-inserts.md
+    summary: (Reserved) usage_events uses INSERT OR IGNORE keyed by event id; raw observations are append-only and reconciled projections are derived. Schema changes must keep PRAGMA journal_mode=WAL and foreign_keys=ON.
+    use_when: Designing a new migration, adding a column, or deciding whether a value lives as raw event vs. rollup.
+
+testing:
+  verification-gates:
+    file: verification-gates.md
+    summary: Canonical gates: python scripts/validate.py + python -m pytest -q always; cargo fmt/clippy/test, npm run check/build, and cargo test --workspace when the matching toolchain is available.
+    use_when: Planning or executing verification; choosing what evidence to record in STATE/plan; checking whether the env supports cargo or npm before running their gates.
+
+security:
+  supply-chain-and-runtime:
+    file: supply-chain-and-runtime.md
+    summary: (Reserved) Lock dependencies, sign releases, notarize macOS, sign Windows, ship SBOM; do not load unaudited connector JS with unrestricted fs/keychain access; production logs must redact Authorization/API keys/cookies/raw payloads.
+    use_when: Cutting a release, adding a release-time process, designing the WASI plugin sandbox, or tightening logs.
