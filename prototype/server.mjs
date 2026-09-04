@@ -212,6 +212,69 @@ function utcDayString(date = new Date()) {
   return new Date(date).toISOString().slice(0, 10);
 }
 
+function honestSnapshot(registry, claude, day = new Date()) {
+  // Honest default: no invented percentages. Every provider renders with
+  // null metrics + explicit estimated/sample provenance until a live source
+  // overlays it in snapshotWithLive(). This is the production default.
+  const dayStr = utcDayString(day);
+  const providers = registry.map(p => ({
+    id: p.id,
+    displayName: p.displayName,
+    vendor: p.vendor,
+    monogram: p.monogram,
+    accent: p.accent,
+    connector: p.connector,
+    status: p.status,
+    sourceMode: p.sourceMode,
+    freshness: p.freshness,
+    scope: p.scope,
+    primaryMetric: p.primaryMetric,
+    primaryLabel: PRIMARY_LABEL[p.primaryMetric] || p.primaryMetric,
+    primaryPercent: null,
+    primaryReset: null,
+    secondaryLabel: p.connector === 'generic-response' || p.connector === 'cloud-billing' ? 'Model mix' : '7-day limit',
+    secondaryPercent: null,
+    secondaryReset: null,
+    tokensToday: null,
+    costToday: null,
+    source: p.sourceMode,
+    health: 'unknown',
+    icon: `/assets/providers/${p._asset.dir}/${p._asset.stem}.svg`,
+    live: false,
+    provenance: { source: p.sourceMode, scope: p.scope, freshness: p.freshness, authority: 'estimated', sample: true },
+  }));
+
+  // Real Claude spool overlay (same ingest path as demo mode).
+  const claudeEntry = providers.find(p => p.id === 'claude-code');
+  if (claudeEntry) {
+    const fiveHour = claude.rate_limits?.five_hour?.used_percentage;
+    const sevenDay = claude.rate_limits?.seven_day?.used_percentage;
+    if (typeof fiveHour === 'number') claudeEntry.primaryPercent = Math.round(fiveHour);
+    if (typeof sevenDay === 'number') claudeEntry.secondaryPercent = Math.round(sevenDay);
+    if (claude.model?.display_name || claude.model?.id) {
+      claudeEntry.tokensToday = `model: ${claude.model.display_name || claude.model.id}`;
+    }
+    if (typeof claude.cost?.total_cost_usd === 'number') {
+      claudeEntry.costToday = `$${claude.cost.total_cost_usd.toFixed(2)} session`;
+    }
+    if (typeof fiveHour === 'number' || claude.model?.id || claude.model?.display_name) {
+      claudeEntry.source = 'claude_code_statusline';
+      claudeEntry.health = 'healthy';
+    }
+  }
+
+  return {
+    generated_at: new Date().toISOString(),
+    day_utc: dayStr,
+    data_basis: 'registry+live-overlay',
+    sample_data: false,
+    demo_mode: false,
+    provider_count: providers.length,
+    providers,
+    models: [],
+  };
+}
+
 function determinSnapshot(registry, claude, day = new Date()) {
   const dayStr = utcDayString(day);
   const dayF = dayFraction(day);
@@ -314,19 +377,35 @@ function determinSnapshot(registry, claude, day = new Date()) {
     day_utc: dayStr,
     data_basis: 'registry+per-day-deterministic',
     sample_data: true,
+    demo_mode: true,
     provider_count: providers.length,
     providers,
     models
   };
 }
-function snapshotLive() {
-  const claude = latestSpoolRecord();
+function latestRealSpoolRecord() {
+  // Honest path: real spool files only, never the checked-in fixture.
+  for (const candidate of [SPOOL, SPOOL_LEGACY]) {
+    try {
+      const data = fs.readFileSync(candidate, 'utf8').trim();
+      if (data) return { record: JSON.parse(data.split(/\r?\n/).at(-1)), real: true };
+    } catch {}
+  }
+  return { record: null, real: false };
+}
+function isDemoRequest(url) {
+  return url.searchParams.get('demo') === '1' || process.env.SAMPLE_MODE === '1';
+}
+function snapshotLive(url) {
   const registry = loadRegistry();
-  return determinSnapshot(registry, claude);
+  if (url && isDemoRequest(url)) return determinSnapshot(registry, latestSpoolRecord());
+  const { record } = latestRealSpoolRecord();
+  return honestSnapshot(registry, record || {});
 }
 
-async function snapshotWithLive() {
-  const base = snapshotLive();
+async function snapshotWithLive(url) {
+  const base = snapshotLive(url);
+  const demoMode = base.demo_mode === true;
   // Overlay honest live readings (local spool, localhost, official APIs with key).
   // Never invent numbers: only override when a live source actually answered.
   let live = {};
@@ -392,13 +471,20 @@ async function snapshotWithLive() {
   base.detected = detected;
   base.live = live;
   base.live_overlay = true;
-  // data_basis stays stable for contract tests; detail in data_basis_detail.
-  base.data_basis_detail = 'registry+per-day-deterministic+live-overlay';
-  // sample_data stays true unless a real Claude spool file exists (existing ingest path).
+  // data_basis stays stable per mode for contract tests; detail in data_basis_detail.
+  base.data_basis_detail = demoMode ? 'registry+per-day-deterministic+live-overlay' : 'registry+live-overlay';
+  // Honest mode: sample_data true only when demo numbers present or a real
+  // Claude spool exists. Honest-empty default reports sample_data:false.
+  if (!demoMode) {
+    const hasLiveSpool = (() => { try { return !!readClaudeSpool().live; } catch { return false; } })();
+    const hasAnyLive = hasLiveSpool || !!(or && or.live) || !!(ol && ol.live) || !!(lm && lm.live);
+    base.sample_data = false;
+    base.has_live_data = hasAnyLive;
+  }
   return base;
 }
-function snapshot() {
-  return snapshotLive();
+function snapshot(url) {
+  return snapshotLive(url);
 }
 
 function json(res, status, payload) {
@@ -442,7 +528,7 @@ function serveAssetsStatic(req, res, u) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok:true, runtime:'prototype', port:PORT, providers: loadRegistry().length, platform: os.platform() });
-  if (req.method === 'GET' && url.pathname === '/api/snapshot') return json(res, 200, await snapshotWithLive());
+  if (req.method === 'GET' && url.pathname === '/api/snapshot') return json(res, 200, await snapshotWithLive(url));
   if (req.method === 'GET' && url.pathname === '/api/detected') {
     try { return json(res, 200, { platform: os.platform(), detected: detectProviders() }); }
     catch (e) { return json(res, 500, { error: 'detect_failed' }); }
@@ -519,25 +605,49 @@ const server = http.createServer(async (req, res) => {
     } catch { return json(res, 500, { error: 'rollup_failed' }); }
   }
   if (req.method === 'GET' && url.pathname === '/api/forecast') {
-    const snap = await snapshotWithLive();
+    const demoMode = isDemoRequest(url);
+    const snap = await snapshotWithLive(url);
     const claude = snap.providers.find((p) => p.id === 'claude-code');
+    if (!demoMode && (claude?.primaryPercent == null)) {
+      // Honest-empty: no observed usage → suppress projections instead of demo burn.
+      return json(res, 200, { quota_next_limit: { available: false, reason: 'no_observed_usage' }, spend_month: { available: false, reason: 'no_observed_usage' }, note: 'No observed usage yet — projections suppressed.' });
+    }
     // Deterministic demo burn series; production feeds scheduler-observed hourly burn.
     const quota = forecastQuota({ usedPercent: claude?.primaryPercent ?? null, resetsAtIso: new Date(Date.now() + 51 * 60 * 1000).toISOString(), recentBurnPerHour: [8, 9, 11, 10, 12] });
     const spend = forecastSpend([2.1, 2.4, 1.9, 2.8, 2.5, 3.1, 2.2]);
     return json(res, 200, { quota_next_limit: quota, spend_month: spend, note: 'Projected values — visually distinct from provider observations.' });
   }
   if (req.method === 'GET' && url.pathname === '/api/alerts') {
-    const snap = await snapshotWithLive();
+    const snap = await snapshotWithLive(url);
     const byId = Object.fromEntries(snap.providers.map((p) => [p.id, p]));
-    const values = { 'claude-code:primaryPercent': byId['claude-code']?.primaryPercent ?? null, 'budget:percent': 62 };
-    return json(res, 200, { fired: evaluateAll(DEFAULT_RULES, values), rules: DEFAULT_RULES.length, values });
+    const values = { 'claude-code:primaryPercent': byId['claude-code']?.primaryPercent ?? null, 'budget:percent': null };
+    return json(res, 200, { fired: evaluateAll(DEFAULT_RULES, values), rules: DEFAULT_RULES.length, values, note: 'Budget percent is null until a real budget source is configured — never a hardcoded 62%.' });
   }
   if (req.method === 'GET' && url.pathname === '/api/widget') {
     // Mobile companion projection (Android widget / iOS Live Activity payload).
-    const snap = await snapshotWithLive();
-    const top = [...snap.providers].sort((a, b) => (b.primaryPercent ?? -1) - (a.primaryPercent ?? -1))[0];
+    const demoMode = isDemoRequest(url);
+    const snap = await snapshotWithLive(url);
+    const ranked = snap.providers.filter((p) => typeof p.primaryPercent === 'number');
+    const top = [...ranked].sort((a, b) => b.primaryPercent - a.primaryPercent)[0] || null;
+    if (!demoMode && !top) {
+      return json(res, 200, {
+        available: false, total_usage: null, total_cost: null, active: `0/${Math.min(6, snap.providers.length)}`,
+        top_provider: null,
+        providers: snap.providers.slice(0, 6).map((p) => ({ id: p.id, displayName: p.displayName, percent: p.primaryPercent, live: !!p.live })),
+        resets_in: null, updated_at: new Date().toISOString(), note: 'No observed usage yet.',
+      });
+    }
+    if (!demoMode) {
+      const liveProviders = snap.providers.filter((p) => p.live);
+      return json(res, 200, {
+        available: true, total_usage: null, total_cost: null, active: `${liveProviders.length}/${snap.providers.length}`,
+        top_provider: top ? { id: top.id, displayName: top.displayName, percent: top.primaryPercent, reset: top.primaryReset } : null,
+        providers: snap.providers.slice(0, 6).map((p) => ({ id: p.id, displayName: p.displayName, percent: p.primaryPercent, live: !!p.live })),
+        resets_in: top?.primaryReset || null, updated_at: new Date().toISOString(),
+      });
+    }
     return json(res, 200, {
-      total_usage: '58%', total_cost: '$12.47', active: `${Math.min(6, snap.providers.length)}/6`,
+      available: true, demo: true, total_usage: '58%', total_cost: '$12.47', active: `${Math.min(6, snap.providers.length)}/6`,
       top_provider: top ? { id: top.id, displayName: top.displayName, percent: top.primaryPercent, reset: top.primaryReset } : null,
       providers: snap.providers.slice(0, 6).map((p) => ({ id: p.id, displayName: p.displayName, percent: p.primaryPercent, live: !!p.live })),
       resets_in: '5d 12h', updated_at: new Date().toISOString(),

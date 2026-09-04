@@ -140,7 +140,7 @@ def test_assets_route_serves_icons(prototype_server: str) -> None:
 
 def test_billing_owner_invariant_in_models(prototype_server: str) -> None:
     base = prototype_server
-    code, body = _http(f"{base}/api/snapshot")
+    code, body = _http(f"{base}/api/snapshot?demo=1")
     assert code == 200
     snapshot = json.loads(body)
     by_id = {p["id"]: p for p in snapshot["providers"]}
@@ -159,21 +159,37 @@ def test_billing_owner_invariant_in_models(prototype_server: str) -> None:
 
 
 def test_ingest_claude_round_trip(prototype_server: str) -> None:
+    import os
     base = prototype_server
-    fixture = (ROOT / "fixtures" / "claude-statusline.json").read_text().encode("utf-8")
-    code, body = _http(f"{base}/api/ingest/claude", method="POST", body=fixture, content_type="application/json")
-    assert code == 202, f"ingest should accept: {body!r}"
+    home = os.path.expanduser("~")
+    spool = os.path.join(home, ".usagehalo", "inbox", "claude-code.jsonl")
+    backup = open(spool, "rb").read() if os.path.exists(spool) else None
+    try:
+        fixture = (ROOT / "fixtures" / "claude-statusline.json").read_text().encode("utf-8")
+        code, body = _http(f"{base}/api/ingest/claude", method="POST", body=fixture, content_type="application/json")
+        assert code == 202, f"ingest should accept: {body!r}"
 
-    # Allow the file to flush.
-    time.sleep(0.2)
-    code, body = _http(f"{base}/api/snapshot")
-    assert code == 200
-    snap = json.loads(body)
-    claude = next(p for p in snap["providers"] if p["id"] == "claude-code")
-    assert claude["primaryPercent"] == 73
-    assert claude["secondaryPercent"] == 21
-    assert claude["source"] == "claude_code_statusline"
-    assert claude["health"] == "healthy"
+        # Allow the file to flush.
+        time.sleep(0.2)
+        code, body = _http(f"{base}/api/snapshot")
+        assert code == 200
+        snap = json.loads(body)
+        claude = next(p for p in snap["providers"] if p["id"] == "claude-code")
+        assert claude["primaryPercent"] == 73
+        assert claude["secondaryPercent"] == 21
+        assert claude["source"] == "claude_code_statusline"
+        assert claude["health"] == "healthy"
+    finally:
+        try:
+            if backup is None:
+                if os.path.exists(spool):
+                    os.remove(spool)
+            else:
+                os.makedirs(os.path.dirname(spool), exist_ok=True)
+                with open(spool, "wb") as fh:
+                    fh.write(backup)
+        except OSError:
+            pass
 
 
 def test_no_negative_dollar_amounts(prototype_server: str) -> None:

@@ -82,18 +82,39 @@ def prototype_server():
 
 
 def test_sample_data_flag_and_day(prototype_server: str) -> None:
+    # Honest default: no invented numbers.
     code, body = _http(f"{prototype_server}/api/snapshot")
     assert code == 200
     snap = json.loads(body)
-    assert snap["sample_data"] is True, "snapshot must declare itself as sample data"
-    assert snap["data_basis"] == "registry+per-day-deterministic"
+    assert snap["data_basis"] == "registry+live-overlay"
     assert snap["day_utc"] == datetime.now(timezone.utc).strftime("%Y-%m-%d")
     assert snap["provider_count"] == 24
+    assert snap["demo_mode"] is False
+    # Demo mode preserves the deterministic sample generator explicitly.
+    code, body = _http(f"{prototype_server}/api/snapshot?demo=1")
+    assert code == 200
+    demo = json.loads(body)
+    assert demo["sample_data"] is True, "demo snapshot must declare itself as sample data"
+    assert demo["data_basis"] == "registry+per-day-deterministic"
+    assert demo["demo_mode"] is True
+    assert demo["provider_count"] == 24
+
+
+def test_honest_default_nulls(prototype_server: str) -> None:
+    code, body = _http(f"{prototype_server}/api/snapshot")
+    assert code == 200
+    snap = json.loads(body)
+    by_id = {p["id"]: p for p in snap["providers"]}
+    for pid, p in by_id.items():
+        if p.get("live"):
+            continue
+        assert p["primaryPercent"] is None, f"{pid} honest default must be null, not invented"
+        assert p.get("provenance", {}).get("sample") is True, pid
 
 
 def test_per_day_determinism(prototype_server: str) -> None:
-    code1, body1 = _http(f"{prototype_server}/api/snapshot")
-    code2, body2 = _http(f"{prototype_server}/api/snapshot")
+    code1, body1 = _http(f"{prototype_server}/api/snapshot?demo=1")
+    code2, body2 = _http(f"{prototype_server}/api/snapshot?demo=1")
     assert code1 == code2 == 200
     s1, s2 = json.loads(body1), json.loads(body2)
     assert s1["day_utc"] == s2["day_utc"]
@@ -135,7 +156,7 @@ def test_seed_changes_with_day(prototype_server: str) -> None:
 
 
 def test_no_negative_or_nan_for_any_provider(prototype_server: str) -> None:
-    code, body = _http(f"{prototype_server}/api/snapshot")
+    code, body = _http(f"{prototype_server}/api/snapshot?demo=1")
     assert code == 200
     snap = json.loads(body)
     assert len(snap["providers"]) == 24
@@ -169,7 +190,7 @@ def test_no_negative_or_nan_for_any_provider(prototype_server: str) -> None:
 def test_realistic_cost_rules(prototype_server: str) -> None:
     reg = json.loads(REGISTRY.read_text())
     by_id = {p["id"]: p for p in reg}
-    code, body = _http(f"{prototype_server}/api/snapshot")
+    code, body = _http(f"{prototype_server}/api/snapshot?demo=1")
     snap = json.loads(body)
     for p in snap["providers"]:
         c = p["costToday"]
@@ -190,14 +211,14 @@ def test_tokens_today_weekly_rhythm(prototype_server: str) -> None:
     reg = json.loads(REGISTRY.read_text())
     tokens_today_ids = [p["id"] for p in reg if p["primaryMetric"] == "tokens_today"]
     assert tokens_today_ids, "no tokens_today providers in registry"
-    code, body = _http(f"{prototype_server}/api/snapshot")
+    code, body = _http(f"{prototype_server}/api/snapshot?demo=1")
     snap = json.loads(body)
     by_id = {p["id"]: p for p in snap["providers"]}
-    today_dow = datetime.now(timezone.utc).weekday()
-    expected_bucket = [38, 60, 78, 82, 70, 28, 14][today_dow]
+    js_dow = (datetime.now(timezone.utc).weekday() + 1) % 7
+    expected_bucket = [38, 60, 78, 82, 70, 28, 14][js_dow]
     for pid in tokens_today_ids:
         pp = by_id[pid]["primaryPercent"]
-        assert abs(pp - expected_bucket) <= 15, f"{pid} tokens_today primaryPercent={pp} not within ±15 of expected {expected_bucket} for dow={today_dow}"
+        assert abs(pp - expected_bucket) <= 15, f"{pid} tokens_today primaryPercent={pp} not within ±15 of expected {expected_bucket} for js_dow={js_dow}"
 
 
 def test_legacy_import_idempotent(prototype_server: str) -> None:
@@ -208,12 +229,15 @@ def test_legacy_import_idempotent(prototype_server: str) -> None:
     no-op. Cleans up after itself.
     """
     import os
-    import shutil
     home = os.path.expanduser("~")
     legacy_dir = os.path.join(home, ".viusagever", "inbox")
     new_dir = os.path.join(home, ".usagehalo", "inbox")
     legacy_file = os.path.join(legacy_dir, "claude-code.jsonl")
     new_file = os.path.join(new_dir, "claude-code.jsonl")
+    # Back up any pre-existing real spool/legacy files; never destroy user data.
+    backups: dict[str, bytes | None] = {}
+    for f in (legacy_file, new_file):
+        backups[f] = open(f, "rb").read() if os.path.exists(f) else None
     # Make sure the new path is empty before we start.
     if os.path.exists(new_file):
         os.remove(new_file)
@@ -237,11 +261,18 @@ def test_legacy_import_idempotent(prototype_server: str) -> None:
         assert out2["migrated"] is False, out2
         assert out2.get("reason") == "already_present", out2
     finally:
-        # Clean up so other tests aren't affected.
-        if os.path.exists(legacy_file):
-            os.remove(legacy_file)
-        if os.path.exists(new_file):
-            os.remove(new_file)
+        # Restore pre-existing real files; clean up only what we created.
+        for f, content in backups.items():
+            try:
+                if content is None:
+                    if os.path.exists(f):
+                        os.remove(f)
+                else:
+                    os.makedirs(os.path.dirname(f), exist_ok=True)
+                    with open(f, "wb") as fh:
+                        fh.write(content)
+            except OSError:
+                pass
         # Best-effort: remove the empty directories we may have created.
         for d in (legacy_dir, new_dir):
             try:

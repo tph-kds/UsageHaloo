@@ -64,6 +64,31 @@ The original packaging runtime did not contain `cargo` / `rustc`; the gates
 above were verified on 2026-09-03 instead. The Svelte production bundle now
 builds (`npm run build` verified).
 
+## Verified 2026-09-04 — realism hardening (webapp + desktop honest data)
+
+Change `.planonce/work/realism-hardening-webapp-desktop` (shipped; plan digest
+`sha256:a500d8d2…`, review `READY_WITH_BACKLOG`):
+
+- Default `GET /api/snapshot` is honest-empty (`data_basis registry+live-overlay`,
+  non-live `primaryPercent:null` + `provenance.sample:true`); deterministic sample
+  kept behind `GET /api/snapshot?demo=1` (`sample_data:true`, `demo_mode:true`).
+  Smoke: honest 1 live (real local Claude spool, 73%) vs demo 24 non-null.
+- `/api/widget`, `/api/forecast`, `/api/alerts` are empty-safe (no hardcoded
+  `58%`/`$12.47`/`62%`/burn arrays in live path; demo values only with `?demo=1`).
+- Tauri `snapshot` projects 24 real registry rows (file-store + health + secret
+  presence + live Claude spool) instead of `providers:[]`; `demo_provider_snapshot`
+  is debug-only; `cargo check` + `clippy -D warnings` clean.
+- Svelte + demo UIs render Unknown/Sample/empty states; hardcoded budgets, alerts,
+  model rows, `200K` denominators, and hash heatmaps removed from live paths
+  (Svelte heatmap shows empty-state unless live/sample; demo heatmap too).
+- `python -m pytest -q` — 41 passed; `validate.py` PASS; `svelte-check` 0/0;
+  `vite build` ok; `cargo test --workspace` 25 passed; `privacy_audit.py` clean;
+  `daemon --once` all pollers honest `live:false` without keys.
+- `.gitignore` fix: `lib/` → `/lib/` (was ignoring all of
+  `apps/desktop-ui/src/lib/`); `src/lib/*.ts` now tracked.
+- Tests touching the real spool (`test_showcase`, `test_realistic_data`
+  legacy-import) back up and restore pre-existing files instead of deleting them.
+
 ## Required gates before a public release
 
 1. `cargo fmt --check`

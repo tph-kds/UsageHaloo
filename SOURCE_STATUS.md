@@ -25,16 +25,16 @@ This repository intentionally separates **implemented scaffold paths** from **pl
 | Release CI | Implemented, unrun | `release.yml` builds Windows/macOS/Linux on tags, drafts GitHub release; needs secrets + runner time |
 | OS keychain | Implemented + proven on Windows | `os-keychain` feature (per-target backends); round-trip test passes against real Credential Manager; default build stays SDK-free |
 | Privacy audit | Implemented, clean | `scripts/privacy_audit.py` scans store+spools for secrets/transcripts/bodies; end-to-end ingest test proves sanitization at rest |
-| Desktop UI | Verified build | `svelte-check` 0 errors, `vite build` succeeds |
+| Desktop UI | Verified build, honest data | `svelte-check` 0 errors, `vite build` succeeds; Tauri `snapshot` projects real provider rows (nulls + live overlays, never invented); summaries/models/budgets/alerts/heatmap render Unknown/Sample/empty states |
 | Daemon + pollers | Implemented, tested | `collectors/daemon.mjs` cadence loop (`--once`/`--loop`), OpenRouter-key/OpenAI/ollama pollers, enterprise stubs honest until configured |
 | OS autostart | Implemented | Windows Task Scheduler task + installer, macOS launchd plist, Linux systemd unit |
 | Svelte UI | Implemented scaffold | Rail, popover, heatmap, dashboard/settings source |
 | Static browser demo | Runnable | Zero-dependency |
-| Local prototype server | Runnable | Zero-dependency Node server + Claude snapshot endpoint |
+| Local prototype server | Runnable, honest default | Zero-dependency Node server + Claude snapshot endpoint; default snapshot honest-empty with live overlays, deterministic sample behind `?demo=1` |
 | Local collectors (`collectors/local.mjs`) | Implemented | Cross-platform detect (Win/macOS/Linux) + live Ollama/LM Studio/Claude-spool/OpenRouter-credits overlay; secrets never read |
 | Workflow engines (`store/reconcile/scheduler/forecast/alerts`) | Implemented | Immutable file store w/ dedupe+retention, read-time reconcile, per-connector cadence, EWMA forecasts, cooldown alerts — all fixture-tested |
 | Provider normalizers (`collectors/providers.mjs`) | Implemented | Perplexity, OpenAI-compatible (xAI/DeepSeek/Groq/Together/Fireworks), Ollama, Cursor (chargedCents billing truth), Copilot daily, Codex windows (flat + `rateLimits` + `rateLimitsByLimitId`), Gemini OTLP |
 | Rust workspace | Compile-blocker fixed | Legacy `viusage_core`crate name replaced by `usage_halo_core` in 8 files; new `usage-halo-scheduler` (cadence + honesty-capped freshness) and `usage-halo-secrets` (alias-only, keychain-ready) crates; Tauri shell projects file store + `connector_health` via real crates |
 | Live bridges | Implemented (Node, tested) | Codex app-server stdio client (`account/rateLimits/read`, timeout-guarded, fake-server tested) + `GET /api/codex/live`; Gemini OTLP receiver (`POST /v1/metrics`, compact + OTLP/JSON, prompt attrs stripped) |
 | Mobile companion | Implemented (web) | `demo/widget.html` + `GET /api/widget` payload for Android widget/notification, iOS widgets/Live Activity |
-| Webapp UI (`demo/`) | Implemented | Example-UI 01–06 parity: rail + hover cards, tray card, overview, providers, models, activity, budgets, alerts, settings (light/dark, glass/solid/minimal/mono, edge placement), responsive mobile |
+| Webapp UI (`demo/`) | Implemented, honest data | Example-UI 01–06 parity: rail + hover cards, tray card, overview, providers, models, activity, budgets, alerts, settings (light/dark, glass/solid/minimal/mono, edge placement), responsive mobile; live paths show Unknown/Sample/empty states, demo numbers sample-gated |

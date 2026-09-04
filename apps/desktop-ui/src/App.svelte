@@ -6,6 +6,7 @@
 
   let providers = $state<ProviderView[]>([]);
   let summaries = $state<SummaryMetric[]>([]);
+  let models = $state<Array<{ surface: string; model_provider: string; billing_owner: string; model: string; tokens: number; cost: string }>>([]);
   let sampleData = $state(false);
   let dayUtc = $state<string | null>(null);
   let source = $state<'tauri' | 'browser' | 'mock' | 'pending'>('pending');
@@ -15,12 +16,15 @@
   let settingsOpen = $state(false);
 
   const liveCount = $derived(providers.filter((p) => p.live).length);
+  const liveTop = $derived([...providers].filter((p) => p.live && p.primaryPercent != null).sort((a, b) => (b.primaryPercent ?? -1) - (a.primaryPercent ?? -1))[0]);
   const topProvider = $derived([...providers].sort((a, b) => (b.primaryPercent ?? -1) - (a.primaryPercent ?? -1))[0]);
+  const hotAlerts = $derived(providers.filter((p) => p.primaryPercent != null && p.primaryPercent >= 80));
 
   async function refresh() {
     const snap = await fetchSnapshot();
     providers = snap.providers;
     summaries = snap.summaries;
+    models = snap.models ?? [];
     sampleData = snap.sampleData;
     dayUtc = snap.dayUtc;
     source = snap.source;
@@ -66,7 +70,7 @@
         <button class:active={page === p} onclick={() => goto(p)}>{p[0].toUpperCase() + p.slice(1)}</button>
       {/each}
     </nav>
-    <div class="sys-live"><i class="dot live"></i><div><strong>All systems live</strong><small>{providers.length} providers · {source}</small></div></div>
+    <div class="sys-live"><i class="dot live"></i><div><strong>{liveCount > 0 ? `${liveCount} live` : sampleData ? 'Sample data' : 'No live data yet'}</strong><small>{providers.length} providers · {source}</small></div></div>
     <div class="tray-row">
       <button onclick={() => theme = theme === 'dark' ? 'light' : 'dark'}>Theme: {theme}</button>
       <button onclick={() => settingsOpen = !settingsOpen}>Rail</button>
@@ -101,16 +105,16 @@
       <section class="grid">
         <article class="panel wide">
           <header><div><div class="eyebrow">ACTIVITY</div><h2>Activity Heatmap — {heatMetric}</h2></div><select bind:value={heatMetric}><option value="tokens">Tokens</option><option value="cost">Cost</option><option value="requests">Requests</option></select></header>
-          <Heatmap metric={heatMetric} />
+          <Heatmap metric={heatMetric} live={liveCount > 0} sample={sampleData} />
           <p class="muted">One measure at a time. Never encode multiple measures simultaneously.</p>
         </article>
         <article class="panel risk">
           <div class="eyebrow">NEXT LIMIT</div>
-          <h2>{topProvider ? `${topProvider.name} ${topProvider.primaryLabel}` : 'No data'}</h2>
-          <strong class="risk-value">{topProvider?.primaryPercent != null && topProvider.primaryPercent > 90 ? '~now' : topProvider?.primaryPercent != null && topProvider.primaryPercent > 70 ? `~${Math.max(1, Math.round((100 - topProvider.primaryPercent) * 1.2))} min` : 'On track'}</strong>
-          <p>At your recent pace, this is the first quota likely to be hit.</p>
-          <div class="bar"><span style={`width:${topProvider?.primaryPercent ?? 0}%;background:${topProvider?.accent ?? '#fff'}`}></span></div>
-          <footer>{topProvider?.primaryPercent ?? '—'}% used · {topProvider?.primaryReset ? `Resets ${topProvider.primaryReset}` : 'No reset'} · {topProvider?.live ? 'Live' : 'Sample'}</footer>
+          <h2>{liveTop ? `${liveTop.name} ${liveTop.primaryLabel}` : 'No observed usage'}</h2>
+          <strong class="risk-value">{liveTop && liveTop.primaryPercent != null && liveTop.primaryPercent > 90 ? '~now' : liveTop && liveTop.primaryPercent != null && liveTop.primaryPercent > 70 ? `~${Math.max(1, Math.round((100 - liveTop.primaryPercent) * 1.2))} min*` : '—'}</strong>
+          <p>{liveTop ? '*Rough pace estimate from the live quota — not a provider forecast.' : 'Connect a provider to project the next limit.'}</p>
+          <div class="bar"><span style={`width:${liveTop?.primaryPercent ?? 0}%;background:${liveTop?.accent ?? '#fff'}`}></span></div>
+          <footer>{liveTop?.primaryPercent ?? '—'}% used · {liveTop?.primaryReset ? `Resets ${liveTop.primaryReset}` : 'No reset'} · {liveTop ? 'Live' : 'No live data'}</footer>
         </article>
         <article class="panel wide">
           <div class="eyebrow">PROVIDERS</div><h2>Usage by Provider</h2>
@@ -133,16 +137,28 @@
         {/each}
       </section>
     {:else if page === 'models'}
-      <article class="panel wide"><div class="eyebrow">MODELS</div><h2>Today's model activity</h2><p>Production view keeps provider-reported and estimated cost separate and never treats a model vendor as the billing owner automatically.</p></article>
+      <article class="panel wide"><div class="eyebrow">MODELS</div><h2>Today's model activity</h2>
+        {#if models.length}
+          {#each models as m}<p><strong>{m.model}</strong> · {m.surface} · billing owner {m.billing_owner} · {m.tokens} tokens · {m.cost}</p>{/each}
+        {:else}
+          <p class="muted">No observed model activity yet. {sampleData ? 'Sample mode — connect a provider or post opt-in telemetry to /api/ingest/event.' : 'Post opt-in telemetry to /api/ingest/event to see rows here.'} Billing owner ≠ model vendor is preserved.</p>
+        {/if}
+      </article>
     {:else if page === 'activity'}
       <article class="panel wide">
         <header><div><div class="eyebrow">ACTIVITY</div><h2>Daily AI activity</h2></div><select bind:value={heatMetric}><option value="tokens">Tokens</option><option value="cost">Cost</option><option value="requests">Requests</option></select></header>
-        <Heatmap metric={heatMetric} />
+        <Heatmap metric={heatMetric} live={liveCount > 0} sample={sampleData} />
       </article>
     {:else if page === 'budgets'}
-      <article class="panel wide"><div class="eyebrow">BUDGETS</div><h2>Budget vs Actual — $12.47 / $20.00 (62%)</h2><div class="bar"><span style="width:62%"></span></div><p>User-defined budgets stay separate from provider quotas. Forecasts are deterministic and explainable.</p></article>
+      <article class="panel wide"><div class="eyebrow">BUDGETS</div><h2>No budgets configured</h2><p>User-defined budgets stay separate from provider quotas. Add a monthly budget to track spend here — no hardcoded demo budget is shown in live mode.</p></article>
     {:else if page === 'alerts'}
-      <article class="panel wide"><div class="eyebrow">ALERTS</div><h2>Recent Alerts</h2><p>Claude usage at 73% · Gemini at 68% · Weekly budget at 62% · Codex reset in 2d. Native notifications with cooldown and dedupe.</p></article>
+      <article class="panel wide"><div class="eyebrow">ALERTS</div><h2>Recent Alerts</h2>
+        {#if hotAlerts.length}
+          {#each hotAlerts as p}<p>{p.name} usage at {p.primaryPercent}% · {p.freshness}{p.live ? ' · Live' : ''}</p>{/each}
+        {:else}
+          <p class="muted">No alerts firing. Alerts trigger at 80%+ observed quota with cooldown and dedupe. Native notifications when enabled.</p>
+        {/if}
+      </article>
     {:else}
       <article class="panel wide"><div class="eyebrow">SETTINGS</div><h2>Providers, Appearance, Placement, Privacy</h2><p>Mirror of the web Settings page: per-provider primary metric, Glass/Solid/Minimal/Monochrome, Light/Dark/System, Left/Right/Top/Bottom edge, keychain-backed credentials, opt-in instrumentation only.</p></article>
       <article class="panel wide">

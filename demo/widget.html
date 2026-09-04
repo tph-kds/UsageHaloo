@@ -18,25 +18,26 @@
   <article class="widget glass">
     <div class="brand"><span class="brand-mark"></span><span class="brand-name">UsageHalo</span><span class="live-pill"><i></i>Live</span></div>
     <div class="widget-grid">
-      <div class="stat"><b id="w-usage">58%</b><span>Total Usage</span></div>
-      <div class="stat"><b id="w-cost">$12.47</b><span>Total Cost</span></div>
-      <div class="stat"><b id="w-active">6 / 6</b><span>Providers</span></div>
-      <div class="stat"><b id="w-top">Claude 73%</b><span>Top Provider</span></div>
+      <div class="stat"><b id="w-usage">—</b><span>Total Usage</span></div>
+      <div class="stat"><b id="w-cost">—</b><span>Total Cost</span></div>
+      <div class="stat"><b id="w-active">—</b><span>Providers</span></div>
+      <div class="stat"><b id="w-top">—</b><span>Top Provider</span></div>
     </div>
     <div id="w-rows"></div>
-    <div class="source-line"><span class="dot live"></span><span id="w-reset">Resets in 5d 12h</span></div>
+    <div class="source-line"><span class="dot live"></span><span id="w-reset">Loading live data…</span></div>
     <p class="muted small">Same <code>/api/widget</code> payload drives the Android widget, persistent notification, iOS widgets and Live Activity. Add to your Home Screen for at-a-glance insights.</p>
   </article>
   <script type="module">
     const d = await (await fetch('/api/widget', { cache: 'no-store' })).json().catch(() => null);
     if (!d) return;
-    document.querySelector('#w-usage').textContent = d.total_usage;
-    document.querySelector('#w-cost').textContent = d.total_cost;
-    document.querySelector('#w-active').textContent = d.active;
-    if (d.top_provider) document.querySelector('#w-top').textContent = `${d.top_provider.displayName} ${d.top_provider.percent}%`;
-    document.querySelector('#w-reset').textContent = `Resets in ${d.resets_in}`;
+    document.querySelector('#w-usage').textContent = d.total_usage ?? (d.available === false ? 'No data' : '—');
+    document.querySelector('#w-cost').textContent = d.total_cost ?? (d.available === false ? 'No data' : '—');
+    document.querySelector('#w-active').textContent = d.active ?? '—';
+    if (d.top_provider) document.querySelector('#w-top').textContent = `${d.top_provider.displayName} ${d.top_provider.percent ?? '—'}${d.top_provider.percent == null ? '' : '%'}`;
+    else document.querySelector('#w-top').textContent = 'No data';
+    document.querySelector('#w-reset').textContent = d.resets_in ? `Resets in ${d.resets_in}` : (d.note || 'No observed usage yet');
     document.querySelector('#w-rows').innerHTML = d.providers.map(p =>
-      `<div class="pbar-row"><span>${p.displayName}</span><div class="pbar"><span style="width:${p.percent ?? 0}%"></span></div><span>${p.percent ?? '—'}%</span></div>`).join('');
+      `<div class="pbar-row"><span>${String(p.displayName ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}</span><div class="pbar"><span style="width:${p.percent ?? 0}%"></span></div><span>${p.percent ?? '—'}${p.percent == null ? '' : '%'}</span></div>`).join('');
   </script>
 </body>
 </html>
