@@ -20,7 +20,7 @@ function healthClass(h) { return h === 'healthy' ? 'live' : (h || 'fresh'); }
 function buildBubble(p) {
   const b = document.createElement('button');
   b.className = 'provider-bubble'; b.dataset.provider = p.id;
-  b.setAttribute('aria-label', `${p.displayName} ${p.primaryPercent ?? 0}%`);
+  b.setAttribute('aria-label', p.primaryPercent == null ? `${p.displayName}, no usage data available` : `${p.displayName} ${p.primaryPercent}%`);
   const pct = p.primaryPercent == null ? '—' : `${p.primaryPercent}%`;
   const icon = p.icon ? `<img class="ring-icon" src="${esc(p.icon)}" alt="" loading="lazy" />` : `<span class="ring-fallback">${esc(p.monogram)}</span>`;
   b.innerHTML = `<span class="ring" style="--p:${p.primaryPercent ?? 0};--accent:${esc(p.accent)}">${icon}</span><span class="bubble-pct">${pct}</span>`;
@@ -75,41 +75,54 @@ function renderTray() {
     <div class="tray-row-item"><span class="mini-logo" style="display:grid;place-items:center;font-weight:800">${esc(p.monogram)}</span>
     <div><strong>${esc(p.displayName)}</strong><div style="color:var(--muted);font-size:10px">${esc(p.vendor || '')}</div><div class="pbar"><span style="width:${p.primaryPercent ?? 0}%;background:${esc(p.accent)}"></span></div></div>
     <span>${p.primaryPercent ?? '—'}${p.primaryPercent == null ? '' : '%'}</span></div>`).join('');
-  el.innerHTML = `<div class="tray-head"><span class="brand-mark"></span><div><strong>UsageHalo</strong><div style="color:var(--muted);font-size:11px">${liveCount > 0 ? `${liveCount} live` : (STATE.sampleData ? 'Sample data' : 'No live data yet')}</div></div><span class="live-pill" style="margin-left:auto"><i></i>${liveCount > 0 ? 'Live' : 'Idle'}</span></div>${rows}<div class="tray-foot"><span>◈ Open Dashboard</span><span>⏻ Quit</span></div>`;
+  el.innerHTML = `<div class="tray-head"><span class="brand-mark"></span><div><strong>UsageHalo</strong><div style="color:var(--muted);font-size:11px">${STATE.sampleData ? 'Sample data' : (liveCount > 0 ? `${liveCount} live` : 'No live data yet')}</div></div><span class="live-pill" style="margin-left:auto"><i></i>${STATE.sampleData ? 'Sample' : (liveCount > 0 ? 'Live' : 'Idle')}</span></div>${rows}<div class="tray-foot"><span>◈ Open Dashboard</span><span>⏻ Quit</span></div>`;
 }
 
 // ---- overview ----
+// Phase 1: totals come ONLY from canonical numeric fields. Display strings
+// are render-only and never parsed back into metrics.
 function totals() {
-  let tokens = 0, cost = 0;
+  let tokens = 0, cost = 0, tokenSources = 0, costSources = 0;
   for (const p of STATE.providers) {
-    const m = String(p.tokensToday || '').match(/([\d.]+)\s*([KM])/i);
-    if (m) tokens += parseFloat(m[1]) * (m[2].toUpperCase() === 'M' ? 1e6 : 1e3);
-    const c = String(p.costToday || '').match(/\$([\d.]+)/);
-    if (c) cost += parseFloat(c[1]);
+    if (typeof p.tokens_today_value === 'number' && Number.isFinite(p.tokens_today_value)) { tokens += p.tokens_today_value; tokenSources++; }
+    if (typeof p.cost_today_value === 'number' && Number.isFinite(p.cost_today_value)) { cost += p.cost_today_value; costSources++; }
   }
-  return { tokens, cost };
+  return { tokens, cost, tokenSources, costSources };
 }
 function renderSummaries() {
-  const { tokens, cost } = totals();
+  const { tokens, cost, tokenSources, costSources } = totals();
   const liveCount = STATE.providers.filter((p) => p.live).length;
   const observed = STATE.providers.filter((p) => p.primaryPercent != null).length;
   const cards = [
-    { label: 'Observed usage', value: observed ? `${tokens ? (tokens / 1e6).toFixed(2) + 'M' : '—'}` : '—', meta: observed ? `${observed} providers with observed usage` : 'no observed usage yet', color: '#7c8aff' },
-    { label: 'Provider cost', value: cost ? `$${cost.toFixed(2)}` : '—', meta: cost ? 'sum of provider-reported costs' : 'no provider-reported costs yet', color: '#b48aff' },
+    { label: 'Observed usage', value: tokenSources ? `${(tokens / 1e6).toFixed(2) + 'M'}` : '—', meta: tokenSources ? `${tokenSources} providers with observed token counts` : 'no observed usage yet', color: '#7c8aff' },
+    { label: 'Provider cost', value: costSources ? `$${cost.toFixed(2)}` : '—', meta: costSources ? 'sum of provider-reported costs' : 'no provider-reported costs yet', color: '#b48aff' },
     { label: 'Requests', value: '—', meta: 'device-observed only', color: '#5ec8d8' },
     { label: 'Live providers', value: `${liveCount} / ${STATE.providers.length}`, meta: liveCount ? 'reporting live' : (STATE.sampleData ? 'sample data' : 'no live providers yet'), color: '#48d597' },
   ];
-  $('#summary-grid').innerHTML = cards.map((c, i) => `<article class="summary-card"><div class="summary-label">${c.label}</div><div class="summary-value">${c.value}</div><div class="summary-meta">${c.meta}</div>${sparkline(hash32(c.label + STATE.dayUtc), 110, 24, c.color)}</article>`).join('');
-  const sub = $('#sys-live-sub'); if (sub) sub.textContent = `${STATE.providers.length} providers · ${STATE.sampleData ? 'Sample' : 'Live'}`;
+  $('#summary-grid').innerHTML = cards.map((c, i) => `<article class="summary-card"><div class="summary-label">${c.label}</div><div class="summary-value">${c.value}</div><div class="summary-meta">${c.meta}</div>${STATE.sampleData ? sparkline(hash32(c.label + STATE.dayUtc), 110, 24, c.color) : ''}</article>`).join('');
+  const sub = $('#sys-live-sub'); if (sub) sub.textContent = `${STATE.providers.length} providers · ${STATE.sampleData ? 'Sample' : (STATE.providers.filter((p) => p.live).length ? 'Live' : 'No live data yet')}`;
+  // P0-10: global status is derived from runtime state, never hardcoded.
+  {
+    const liveN = STATE.providers.filter((p) => p.live).length;
+    const staleN = STATE.providers.filter((p) => !p.live && p.primaryPercent != null).length;
+    const title = $('#sys-live-title');
+    if (title) title.textContent = STATE.sampleData ? 'Sample data' : liveN ? `${liveN} live${staleN ? ` · ${staleN} stale` : ''}` : staleN ? `${staleN} stale` : 'No live data yet';
+    const dot = $('#sys-live-dot');
+    if (dot) dot.className = `dot ${STATE.sampleData ? 'sample' : liveN ? 'live' : 'idle'}`;
+    const pill = $('#brand-pill');
+    if (pill) pill.innerHTML = `<i></i>${STATE.sampleData ? 'Sample' : liveN ? 'Live' : 'No data'}`;
+  }
   const banner = $('#sample-banner');
   if (STATE.sampleData) { banner.hidden = false; banner.textContent = `Sample data · as of ${STATE.dayUtc || 'today'} · source: ${STATE.source} — connect providers for live numbers. Provenance is shown on every card.`; }
   else { banner.hidden = true; }
 }
 function renderHeatmap(id, metric) {
   const el = $(id); if (!el) return; el.innerHTML = '';
-  const liveCount = STATE.providers.filter((p) => p.live).length;
-  if (!STATE.sampleData && liveCount === 0) {
-    el.innerHTML = '<p class="muted small">No observed activity yet — heatmap appears after live telemetry arrives.</p>';
+  // P0-01: synthetic cells render ONLY in explicit sample mode. A live
+  // provider with no history buckets shows an honest empty state — the
+  // presence of live data must never unlock a generated pattern.
+  if (!STATE.sampleData) {
+    el.innerHTML = '<p class="muted small">No historical activity collected yet.</p>';
     return;
   }
   const base = hash32(metric + STATE.dayUtc);

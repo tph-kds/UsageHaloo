@@ -26,7 +26,10 @@ struct Credits {
 impl OpenRouterConnector {
     pub fn new(management_key: impl Into<String>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(20))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
             management_key: management_key.into(),
         }
     }

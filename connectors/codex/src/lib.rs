@@ -9,7 +9,16 @@ use usage_halo_core::{
 /// Process lifecycle and version-specific initialization belong in the desktop
 /// runtime so they can be updated independently of this pure parser.
 pub fn parse_rate_limits(result: &Value) -> Vec<QuotaWindow> {
-    let now = Utc::now();
+    parse_rate_limits_at(result, Utc::now())
+}
+
+/// Same parser with an explicit observation time, so replays and imports
+/// preserve source timestamps instead of stamping read time (P0-05).
+pub fn parse_rate_limits_at(
+    result: &Value,
+    observed_at: chrono::DateTime<Utc>,
+) -> Vec<QuotaWindow> {
+    let now = observed_at;
     let mut output = Vec::new();
 
     let snapshots: Vec<(String, &Value)> =

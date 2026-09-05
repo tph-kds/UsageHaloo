@@ -16,6 +16,9 @@ export type ProviderView = {
   secondaryReset?: string | null;
   tokensToday?: string | null;
   costToday?: string | null;
+  /** Canonical numerics (Phase 1): null = unavailable. Display strings are render-only. */
+  tokens_today_value?: number | null;
+  cost_today_value?: number | null;
   freshness: Freshness;
   source: string;
   scope: string;

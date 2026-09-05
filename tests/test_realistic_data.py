@@ -108,8 +108,16 @@ def test_honest_default_nulls(prototype_server: str) -> None:
     for pid, p in by_id.items():
         if p.get("live"):
             continue
-        assert p["primaryPercent"] is None, f"{pid} honest default must be null, not invented"
-        assert p.get("provenance", {}).get("sample") is True, pid
+        if p["primaryPercent"] is None:
+            # No observation at all: null metric, never an invented number.
+            assert p.get("provenance", {}).get("sample") is True, pid
+        else:
+            # Stale-but-real spool-backed observation: values are kept with
+            # real (non-sample) provenance and computed freshness — stale data
+            # is displayed as stale, never relabeled sample, never zeroed.
+            assert pid == "claude-code", f"only the spool overlay may carry non-live values: {pid}"
+            assert p.get("provenance", {}).get("sample") is False, pid
+            assert p.get("provenance", {}).get("freshness") in ("fresh", "delayed", "stale"), pid
 
 
 def test_per_day_determinism(prototype_server: str) -> None:

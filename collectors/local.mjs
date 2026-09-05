@@ -108,17 +108,42 @@ export function detectProviders() {
 }
 
 // ---------------------------------------------------------------- live readers
-export function readClaudeSpool() {
+// Freshness policy for file/spool connectors (P0-05): a spool record is read
+// now but may have been generated long ago. `observed_at` is the source
+// measurement time and is NEVER refreshed by re-reading the same file.
+// Freshness derives from `now - observed_at`:
+//   <= 120s  live | <= 10min fresh | <= 60min delayed | else stale
+// `live=true` only when the observation is live or fresh.
+const SPOOL_LIVE_AFTER_MS = 120 * 1000;
+const SPOOL_FRESH_AFTER_MS = 10 * 60 * 1000;
+const SPOOL_STALE_AFTER_MS = 60 * 60 * 1000;
+
+function spoolFreshness(ageMs) {
+  if (!Number.isFinite(ageMs) || ageMs < 0) return 'unknown';
+  if (ageMs <= SPOOL_LIVE_AFTER_MS) return 'live';
+  if (ageMs <= SPOOL_FRESH_AFTER_MS) return 'fresh';
+  if (ageMs <= SPOOL_STALE_AFTER_MS) return 'delayed';
+  return 'stale';
+}
+
+export function readClaudeSpool(nowMs = Date.now()) {
   for (const p of [path.join(HOME, '.usagehalo', 'inbox', 'claude-code.jsonl'), path.join(HOME, '.viusagever', 'inbox', 'claude-code.jsonl')]) {
     try {
+      const st = fs.statSync(p);
       const data = fs.readFileSync(p, 'utf8').trim();
       if (!data) continue;
       const last = JSON.parse(data.split(/\r?\n/).at(-1));
+      // Preserve the source measurement time. Fall back to file mtime only
+      // when the record carries no timestamp; never use read time.
+      const observedAt = last?.observed_at || new Date(st.mtimeMs).toISOString();
+      const ageMs = nowMs - new Date(observedAt).getTime();
+      const freshness = spoolFreshness(ageMs);
+      const live = freshness === 'live' || freshness === 'fresh';
       const five = last?.rate_limits?.five_hour?.used_percentage;
       const seven = last?.rate_limits?.seven_day?.used_percentage;
       return {
-        provider: 'claude-code', live: true, source: 'claude_code_statusline', scope: 'account',
-        freshness: 'live', observed_at: new Date().toISOString(),
+        provider: 'claude-code', live, source: 'claude_code_statusline', scope: 'account',
+        freshness, observed_at: observedAt, age_seconds: Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 1000)) : null,
         primaryPercent: typeof five === 'number' ? Math.round(five) : null,
         secondaryPercent: typeof seven === 'number' ? Math.round(seven) : null,
         model: last?.model?.display_name || last?.model?.id || null,

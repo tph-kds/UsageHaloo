@@ -9,7 +9,9 @@
   let models = $state<Array<{ surface: string; model_provider: string; billing_owner: string; model: string; tokens: number; cost: string }>>([]);
   let sampleData = $state(false);
   let dayUtc = $state<string | null>(null);
-  let source = $state<'tauri' | 'browser' | 'mock' | 'pending'>('pending');
+  let source = $state<'tauri' | 'browser' | 'demo' | 'error' | 'pending'>('pending');
+  let lastError = $state<string | null>(null);
+  let lastSuccessAt = $state<string | null>(null);
   let heatMetric = $state('tokens');
   let page = $state('overview');
   let theme = $state<'dark' | 'light'>('dark');
@@ -22,12 +24,20 @@
 
   async function refresh() {
     const snap = await fetchSnapshot();
+    if (snap.source === 'error') {
+      // P0-02: failed refresh retains last-known real values as stale/error,
+      // never substitutes mock data and never wipes the screen.
+      lastError = snap.error ?? 'refresh failed';
+      return;
+    }
     providers = snap.providers;
     summaries = snap.summaries;
     models = snap.models ?? [];
     sampleData = snap.sampleData;
     dayUtc = snap.dayUtc;
     source = snap.source;
+    lastError = null;
+    lastSuccessAt = new Date().toISOString();
   }
 
   refresh();
@@ -64,7 +74,7 @@
 
 <div class="shell" data-theme={theme}>
   <aside class="sidebar glass">
-    <div class="brand"><span class="brand-mark"></span><span>UsageHalo</span><span class="live-pill"><i></i>Live</span></div>
+    <div class="brand"><span class="brand-mark"></span><span>UsageHalo</span>{#if sampleData}<span class="live-pill sample"><i></i>Sample</span>{:else if liveCount > 0}<span class="live-pill"><i></i>Live</span>{:else}<span class="live-pill idle"><i></i>No data</span>{/if}</div>
     <nav class="side-nav">
       {#each ['overview', 'providers', 'models', 'activity', 'budgets', 'alerts', 'settings'] as p}
         <button class:active={page === p} onclick={() => goto(p)}>{p[0].toUpperCase() + p.slice(1)}</button>
@@ -92,6 +102,11 @@
       </nav>
     </header>
 
+    {#if lastError && providers.length === 0 && !sampleData}
+      <div class="error-banner" role="alert">UsageHalo data service is unavailable — {lastError}. No sample values have been substituted. <button onclick={refresh}>Retry</button></div>
+    {:else if lastError && providers.length > 0}
+      <div class="stale-banner" role="status">Unable to refresh — showing last successful data. {lastError} <button onclick={refresh}>Retry</button></div>
+    {/if}
     {#if sampleData}
       <div class="sample-banner">Sample data · as of {dayUtc ?? 'today'} · source: {source} — connect a provider for live numbers. Every metric shows its provenance.</div>
     {:else if liveCount > 0}
@@ -105,7 +120,7 @@
       <section class="grid">
         <article class="panel wide">
           <header><div><div class="eyebrow">ACTIVITY</div><h2>Activity Heatmap — {heatMetric}</h2></div><select bind:value={heatMetric}><option value="tokens">Tokens</option><option value="cost">Cost</option><option value="requests">Requests</option></select></header>
-          <Heatmap metric={heatMetric} live={liveCount > 0} sample={sampleData} />
+          <Heatmap metric={heatMetric} sample={sampleData} />
           <p class="muted">One measure at a time. Never encode multiple measures simultaneously.</p>
         </article>
         <article class="panel risk">
@@ -133,7 +148,7 @@
           <article class="panel"><div class="eyebrow">{p.vendor ?? p.scope}</div><h2>{p.name}</h2>
           <div class="bar"><span style={`width:${p.primaryPercent ?? 0}%;background:${p.accent}`}></span></div>
           <p><strong>{p.primaryPercent ?? '—'}%</strong> {p.primaryLabel} · {p.primaryReset ? `Resets ${p.primaryReset}` : 'No reset'}</p>
-          <p class="muted">{p.source} · {p.scope} · {p.freshness}{p.live ? ' · Live' : ' · Sample'}</p></article>
+          <p class="muted">{p.source} · {p.scope} · {p.freshness}{p.live ? ' · Live' : ''}</p></article>
         {/each}
       </section>
     {:else if page === 'models'}
@@ -147,7 +162,7 @@
     {:else if page === 'activity'}
       <article class="panel wide">
         <header><div><div class="eyebrow">ACTIVITY</div><h2>Daily AI activity</h2></div><select bind:value={heatMetric}><option value="tokens">Tokens</option><option value="cost">Cost</option><option value="requests">Requests</option></select></header>
-        <Heatmap metric={heatMetric} live={liveCount > 0} sample={sampleData} />
+        <Heatmap metric={heatMetric} sample={sampleData} />
       </article>
     {:else if page === 'budgets'}
       <article class="panel wide"><div class="eyebrow">BUDGETS</div><h2>No budgets configured</h2><p>User-defined budgets stay separate from provider quotas. Add a monthly budget to track spend here — no hardcoded demo budget is shown in live mode.</p></article>
@@ -172,6 +187,8 @@
 
 <style>
   .sample-banner { margin: 16px 0 0; padding: 8px 12px; border-radius: 10px; background: rgba(255, 196, 84, 0.10); border: 1px solid rgba(255, 196, 84, 0.30); color: #ffd28a; font-size: 12px; display: inline-block; }
+  .error-banner { margin: 16px 0 0; padding: 8px 12px; border-radius: 10px; background: rgba(255, 92, 92, 0.10); border: 1px solid rgba(255, 92, 92, 0.35); color: #ffb4b4; font-size: 12px; display: inline-block; }
+  .stale-banner { margin: 16px 0 0; padding: 8px 12px; border-radius: 10px; background: rgba(255, 196, 84, 0.08); border: 1px solid rgba(255, 196, 84, 0.25); color: #ffd28a; font-size: 12px; display: inline-block; }
   .live-banner { margin: 16px 0 0; padding: 8px 12px; border-radius: 10px; background: rgba(72, 213, 151, 0.10); border: 1px solid rgba(72, 213, 151, 0.30); color: #b6f5d4; font-size: 12px; display: inline-block; }
   .pbar-row { display: grid; grid-template-columns: 130px 1fr 48px; gap: 10px; align-items: center; font-size: 12px; padding: 6px 0; }
 </style>

@@ -3,7 +3,7 @@ name = "usage-halo-desktop"
 version = "0.1.0"
 description = "UsageHalo desktop shell"
 edition = "2021"
-license = "MIT"
+license.workspace = true
 
 [lib]
 name = "usage_halo_lib"
@@ -17,8 +17,12 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tokio.workspace = true
 chrono.workspace = true
 usage-halo-core = { path = "../../../crates/usage-halo-core" }
+usage-halo-projection = { path = "../../../crates/usage-halo-projection" }
 usage-halo-reconcile = { path = "../../../crates/usage-halo-reconcile" }
 usage-halo-scheduler = { path = "../../../crates/usage-halo-scheduler" }
-usage-halo-secrets = { path = "../../../crates/usage-halo-secrets" }
+usage-halo-secrets = { path = "../../../crates/usage-halo-secrets", features = ["os-keychain"] }
+usage-halo-storage = { path = "../../../crates/usage-halo-storage" }
+usage-halo-collector = { path = "../../../crates/usage-halo-collector" }

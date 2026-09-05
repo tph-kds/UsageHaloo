@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/impeccable/SKILL.md",
+      "computedHash": "ff725daa0324d7140b9a7787fa9062173214d3359feef897469e581c022e674b"
+    },
     "planonce-brown-large": {
       "source": "tph-kds/PlanOnce",
       "sourceType": "github",

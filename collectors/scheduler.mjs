@@ -31,18 +31,37 @@ export function freshnessState(connectorId, ageSeconds) {
   if (ageSeconds <= meta.max_healthy_age_seconds) return 'fresh';
   return 'stale';
 }
-/** Build day/provider/model rollups from reconciled events (pure, testable). */
+/** Local calendar date (YYYY-MM-DD) of an instant in an IANA timezone.
+ *  Throws a RangeError for unknown zones — callers must not silently fall
+ *  back to UTC slicing, or the `timezone` label becomes a lie (P0-06). */
+export function localDate(timezone, instantIso) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(instantIso));
+}
+/** Build day/provider/model rollups from reconciled events (pure, testable).
+ *  Days are LOCAL calendar dates in `timezone`; each row carries coverage
+ *  metadata so partial dimensions are disclosed, never implied complete. */
 export function buildRollups(events, timezone = 'UTC') {
+  // Validate the zone once up front: an unknown zone throws here instead of
+  // silently grouping by UTC while labeled otherwise.
+  localDate(timezone, '2026-01-01T00:00:00Z');
   const map = new Map();
   for (const e of events) {
-    const day = (e.observed_at || '').slice(0, 10) || 'unknown';
+    let day;
+    try {
+      day = e.observed_at ? localDate(timezone, e.observed_at) : 'unknown';
+    } catch {
+      day = 'unknown';
+    }
     const key = [day, e.provider, e.billing_owner || e.provider, e.model || ''].join('|');
-    const cur = map.get(key) || { local_date: day, timezone, provider: e.provider, billing_owner: e.billing_owner || e.provider, model: e.model || '', input_tokens: 0, output_tokens: 0, requests: 0, provider_cost: 0, estimated_cost: 0 };
-    cur.input_tokens += e.input_tokens || 0;
-    cur.output_tokens += e.output_tokens || 0;
+    const cur = map.get(key) || { local_date: day, timezone, provider: e.provider, billing_owner: e.billing_owner || e.provider, model: e.model || '', input_tokens: 0, output_tokens: 0, requests: 0, provider_cost: 0, estimated_cost: 0, observation_count: 0, input_tokens_present: 0, output_tokens_present: 0, cost_present: 0 };
+    cur.observation_count += 1;
+    if (e.input_tokens != null) { cur.input_tokens += e.input_tokens; cur.input_tokens_present += 1; }
+    if (e.output_tokens != null) { cur.output_tokens += e.output_tokens; cur.output_tokens_present += 1; }
     cur.requests += e.requests || 0;
-    cur.provider_cost += e.provider_cost || 0;
-    cur.estimated_cost += e.estimated_cost || 0;
+    if (e.provider_cost != null) { cur.provider_cost += e.provider_cost; cur.cost_present += 1; }
+    if (e.estimated_cost != null) { cur.estimated_cost += e.estimated_cost; }
     map.set(key, cur);
   }
   return [...map.values()].sort((a, b) => a.local_date.localeCompare(b.local_date));

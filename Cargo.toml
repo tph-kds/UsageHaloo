@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
   "crates/usage-halo-core",
+  "crates/usage-halo-collector",
+  "crates/usage-halo-projection",
   "crates/usage-halo-reconcile",
   "crates/usage-halo-storage",
   "crates/usage-halo-scheduler",
@@ -19,13 +21,14 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://example.invalid/usagehalo"
 
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

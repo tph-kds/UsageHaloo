@@ -17,6 +17,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { detectProviders, readOllama, readLMStudio, readClaudeSpool, readOpenRouterCredits } from '../collectors/local.mjs';
 import { readEvents } from '../collectors/store.mjs';
@@ -192,20 +193,30 @@ function realisticPrimary(metric, basePct, dayF, dow) {
   }
 }
 
-function realisticCost(connector, seed, dow) {
-  if (connector === 'subscription' || connector === 'zai') return 'subscription';
-  if (connector === 'cloud-billing' || connector === 'openai' || connector === 'openrouter') {
-    const wkend = (dow === 0 || dow === 6) ? 0.7 : 1.0;
-    const dollars = ((((seed >>> 4) % 2800) / 100) + 0.20) * wkend;
-    return `$${dollars.toFixed(2)}`;
-  }
-  return '—';
+function numericTokens(seed, dow) {
+  const weekly = [1.2, 1.8, 2.4, 2.6, 2.1, 0.9, 0.5][dow];
+  return Math.round(200_000 + (seed % 9_800_000) * weekly);
 }
 
 function realisticTokens(seed, dow) {
-  const weekly = [1.2, 1.8, 2.4, 2.6, 2.1, 0.9, 0.5][dow];
-  const t = 200_000 + (seed % 9_800_000) * weekly;
+  const t = numericTokens(seed, dow);
   return t < 1_000_000 ? `${Math.round(t / 1000)}K` : `${(t / 1_000_000).toFixed(2)}M`;
+}
+
+function numericCost(connector, seed, dow) {
+  if (connector === 'subscription' || connector === 'zai') return null;
+  if (connector === 'cloud-billing' || connector === 'openai' || connector === 'openrouter') {
+    const wkend = (dow === 0 || dow === 6) ? 0.7 : 1.0;
+    return Number((((((seed >>> 4) % 2800) / 100) + 0.20) * wkend).toFixed(2));
+  }
+  return null;
+}
+
+function realisticCost(connector, seed, dow) {
+  if (connector === 'subscription' || connector === 'zai') return 'subscription';
+  const dollars = numericCost(connector, seed, dow);
+  if (dollars == null) return '—';
+  return `$${dollars.toFixed(2)}`;
 }
 
 function utcDayString(date = new Date()) {
@@ -237,6 +248,12 @@ function honestSnapshot(registry, claude, day = new Date()) {
     secondaryReset: null,
     tokensToday: null,
     costToday: null,
+    // Canonical numerics (Phase 1): null = unavailable, never zero-by-default.
+    // The honest path has no real token rollup yet (Phase 3), and the Claude
+    // session cost below is a session figure, not a calendar-day total, so
+    // both stay null here by design.
+    tokens_today_value: null,
+    cost_today_value: null,
     source: p.sourceMode,
     health: 'unknown',
     icon: `/assets/providers/${p._asset.dir}/${p._asset.stem}.svg`,
@@ -264,6 +281,7 @@ function honestSnapshot(registry, claude, day = new Date()) {
   }
 
   return {
+    schema_version: 1,
     generated_at: new Date().toISOString(),
     day_utc: dayStr,
     data_basis: 'registry+live-overlay',
@@ -307,6 +325,9 @@ function determinSnapshot(registry, claude, day = new Date()) {
       secondaryReset: p.connector === 'cloud-billing' ? 'Sep 30' : 'Thu 00:00',
       tokensToday: realisticTokens(seed, dow),
       costToday: realisticCost(p.connector, seed, dow),
+      // Canonical numerics backing the display strings above (Phase 1).
+      tokens_today_value: numericTokens(seed, dow),
+      cost_today_value: numericCost(p.connector, seed, dow),
       freshness: p.freshness,
       source: p.sourceMode,
       health: FRESHNESS_HEALTH[p.freshness] || 'fresh',
@@ -315,10 +336,13 @@ function determinSnapshot(registry, claude, day = new Date()) {
   });
 
   // Apply real Claude snapshot if present (preserves the existing ingest path).
+  // A real overlay supersedes demo numbers: synthetic numeric twins are
+  // nulled for this entry so demo values never mix with real observations.
   const claudeEntry = providers.find(p => p.id === 'claude-code');
   if (claudeEntry) {
     const fiveHour = claude.rate_limits?.five_hour?.used_percentage;
     const sevenDay = claude.rate_limits?.seven_day?.used_percentage;
+    const hasReal = typeof fiveHour === 'number' || claude.model?.id || claude.model?.display_name;
     if (typeof fiveHour === 'number') claudeEntry.primaryPercent = Math.round(fiveHour);
     if (typeof sevenDay === 'number') claudeEntry.secondaryPercent = Math.round(sevenDay);
     if (claude.model?.display_name || claude.model?.id) {
@@ -326,6 +350,10 @@ function determinSnapshot(registry, claude, day = new Date()) {
     }
     if (typeof claude.cost?.total_cost_usd === 'number') {
       claudeEntry.costToday = `$${claude.cost.total_cost_usd.toFixed(2)} session`;
+    }
+    if (hasReal) {
+      claudeEntry.tokens_today_value = null;
+      claudeEntry.cost_today_value = null;
     }
     claudeEntry.source = 'claude_code_statusline';
     claudeEntry.health = 'healthy';
@@ -373,6 +401,7 @@ function determinSnapshot(registry, claude, day = new Date()) {
   }
 
   return {
+    schema_version: 1,
     generated_at: new Date().toISOString(),
     day_utc: dayStr,
     data_basis: 'registry+per-day-deterministic',
@@ -464,9 +493,15 @@ async function snapshotWithLive(url) {
     }
   }
   const cl = live['claude-code'];
-  if (cl && cl.live) {
+  // P0-09: a real spool record exists even when stale. Stale real data keeps
+  // its values with a real (non-sample) provenance and the computed
+  // freshness — it is never relabeled sample and never hidden.
+  if (cl && 'observed_at' in cl) {
     const e = base.providers.find((p) => p.id === 'claude-code');
-    if (e) { e.live = true; e.provenance = { source: 'claude_code_statusline', scope: 'account', freshness: 'live', authority: 'provider_telemetry', sample: false }; }
+    if (e) {
+      e.live = !!cl.live;
+      e.provenance = { source: 'claude_code_statusline', scope: 'account', freshness: cl.freshness || 'unknown', authority: 'provider_telemetry', sample: false };
+    }
   }
   base.detected = detected;
   base.live = live;
@@ -485,6 +520,49 @@ async function snapshotWithLive(url) {
 }
 function snapshot(url) {
   return snapshotLive(url);
+}
+
+// ---------------------------------------------------------------------------
+// Canonical projection adapter (Phase 4, Gate 4).
+//
+// `/api/projection` and `/api/activity` serve the SAME ProjectionService the
+// Tauri shell calls directly, via the `usagehalo_projection` CLI. This
+// adapter is a thin serializer: it passes arguments through and relays the
+// CLI's JSON verbatim. Failures (missing binary, timeout, nonzero exit)
+// surface as explicit 5xx errors — never gaps, never fallback numbers.
+// ---------------------------------------------------------------------------
+function projectionBin() {
+  const exe = process.platform === 'win32' ? 'usagehalo_projection.exe' : 'usagehalo_projection';
+  const candidate = path.join(ROOT, 'target', 'debug', exe);
+  try {
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+function projectionDb() {
+  return path.join(os.homedir(), '.usagehalo', 'usagehalo.db');
+}
+
+function runProjection(args) {
+  const bin = projectionBin();
+  if (!bin) {
+    return { ok: false, status: 503, error: 'projection_unavailable', detail: 'usagehalo_projection binary not built; run: cargo build -p usage-halo-projection' };
+  }
+  const r = spawnSync(bin, args, { encoding: 'utf8', timeout: 20_000 });
+  if (r.error) {
+    return { ok: false, status: 502, error: 'projection_timeout', detail: String(r.error.message || r.error).slice(0, 200) };
+  }
+  if (r.status !== 0) {
+    return { ok: false, status: 502, error: 'projection_failed', detail: String(r.stderr || '').slice(0, 300) };
+  }
+  try {
+    return { ok: true, payload: JSON.parse(r.stdout) };
+  } catch {
+    return { ok: false, status: 502, error: 'projection_unparseable', detail: r.stdout.slice(0, 200) };
+  }
 }
 
 function json(res, status, payload) {
@@ -529,6 +607,25 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok:true, runtime:'prototype', port:PORT, providers: loadRegistry().length, platform: os.platform() });
   if (req.method === 'GET' && url.pathname === '/api/snapshot') return json(res, 200, await snapshotWithLive(url));
+  if (req.method === 'GET' && url.pathname === '/api/projection') {
+    const tz = url.searchParams.get('timezone') || 'UTC';
+    const r = runProjection(['overview', '--db', projectionDb(), '--timezone', tz]);
+    if (!r.ok) return json(res, r.status, { error: r.error, detail: r.detail });
+    return json(res, 200, r.payload);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/activity') {
+    const args = ['activity', '--db', projectionDb(),
+      '--from', url.searchParams.get('from') || new Date(Date.now() - 86400_000).toISOString(),
+      '--to', url.searchParams.get('to') || new Date().toISOString(),
+      '--timezone', url.searchParams.get('timezone') || 'UTC',
+      '--bucket', url.searchParams.get('bucket') || 'day',
+      '--metric', url.searchParams.get('metric') || 'tokens',
+      '--limit', url.searchParams.get('limit') || '500'];
+    for (const p of url.searchParams.getAll('provider')) args.push('--provider', p);
+    const r = runProjection(args);
+    if (!r.ok) return json(res, r.status, { error: r.error, detail: r.detail });
+    return json(res, 200, r.payload);
+  }
   if (req.method === 'GET' && url.pathname === '/api/detected') {
     try { return json(res, 200, { platform: os.platform(), detected: detectProviders() }); }
     catch (e) { return json(res, 500, { error: 'detect_failed' }); }
@@ -558,13 +655,16 @@ const server = http.createServer(async (req, res) => {
     try {
       const j = JSON.parse(body);
       if (j.prompt || j.completion || j.messages || j.content) return json(res, 400, { ok:false, error:'telemetry_fields_only' });
+      // P0-11: missing dimensions stay null (source did not report them).
+      // Zero means the source explicitly observed none.
+      const numOrNull = (v) => (v == null || v === '' ? null : (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null));
       const clean = {
         observed_at: new Date().toISOString(),
         provider: String(j.provider || 'unknown').slice(0,64),
         model: String(j.model || 'unknown').slice(0,128),
-        input_tokens: Number(j.input_tokens ?? j.prompt_tokens ?? 0) || 0,
-        output_tokens: Number(j.output_tokens ?? j.completion_tokens ?? 0) || 0,
-        cost: typeof j.cost === 'number' ? j.cost : null,
+        input_tokens: numOrNull(j.input_tokens ?? j.prompt_tokens),
+        output_tokens: numOrNull(j.output_tokens ?? j.completion_tokens),
+        cost: typeof j.cost === 'number' && j.cost >= 0 ? j.cost : null,
         request_id: typeof j.request_id === 'string' ? j.request_id.slice(0,128) : null,
         source: 'instrumented_response', scope: 'instrumented_traffic_only',
       };
@@ -606,12 +706,19 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/api/forecast') {
     const demoMode = isDemoRequest(url);
+    if (!demoMode) {
+      // P0-03: production forecasts require a persisted real time series with
+      // a provider-supplied reset. That pipeline lands in Phase 3/4; until
+      // then production honestly reports insufficient evidence instead of
+      // mixing one real percent with hardcoded burn/reset/spend series.
+      return json(res, 200, {
+        quota_next_limit: { suppressed: true, reason: 'insufficient_evidence', detail: 'Need at least 5 non-stale quota observations spanning 15 minutes with a provider-supplied reset.' },
+        spend_month: { suppressed: true, reason: 'insufficient_evidence', detail: 'No persisted real daily cost series yet.' },
+        note: 'Forecast unavailable — collecting real pace data.',
+      });
+    }
     const snap = await snapshotWithLive(url);
     const claude = snap.providers.find((p) => p.id === 'claude-code');
-    if (!demoMode && (claude?.primaryPercent == null)) {
-      // Honest-empty: no observed usage → suppress projections instead of demo burn.
-      return json(res, 200, { quota_next_limit: { available: false, reason: 'no_observed_usage' }, spend_month: { available: false, reason: 'no_observed_usage' }, note: 'No observed usage yet — projections suppressed.' });
-    }
     // Deterministic demo burn series; production feeds scheduler-observed hourly burn.
     const quota = forecastQuota({ usedPercent: claude?.primaryPercent ?? null, resetsAtIso: new Date(Date.now() + 51 * 60 * 1000).toISOString(), recentBurnPerHour: [8, 9, 11, 10, 12] });
     const spend = forecastSpend([2.1, 2.4, 1.9, 2.8, 2.5, 3.1, 2.2]);
@@ -677,7 +784,7 @@ const server = http.createServer(async (req, res) => {
         for (const e of parsed.events) {
           const r = insertUsageEvent({
             provider: e.provider, billing_owner: e.billing_owner, model: e.model,
-            input_tokens: e.input_tokens || 0, output_tokens: e.output_tokens || 0,
+            input_tokens: e.input_tokens ?? null, output_tokens: e.output_tokens ?? null,
             observed_at: e.observed_at, authority: e.authority,
             reconciliation_key: null, request_id: null,
           });

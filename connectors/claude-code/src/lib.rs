@@ -51,7 +51,15 @@ impl ClaudeCodeConnector {
     }
 
     pub fn parse(payload: &Value) -> Result<UsageSnapshot, ConnectorError> {
+        // P0-05: preserve the source measurement time. The status-line bridge
+        // stamps `observed_at` at ingest; re-reads must never refresh it.
         let now = Utc::now();
+        let observed_at = payload
+            .get("observed_at")
+            .and_then(Value::as_str)
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|d| d.with_timezone(&chrono::Utc))
+            .unwrap_or(now);
         let mut quotas = Vec::new();
 
         for (limit_id, label, ptr) in [
@@ -92,7 +100,7 @@ impl ClaudeCodeConnector {
                     scope: SourceScope::Account,
                     authority: SourceAuthority::ProviderTelemetry,
                     freshness: FreshnessClass::Live,
-                    observed_at: now,
+                    observed_at,
                     provider_timestamp: None,
                     confidence: 1.0,
                 },
@@ -189,5 +197,16 @@ mod tests {
         let snapshot = ClaudeCodeConnector::parse(&raw).unwrap();
         assert_eq!(snapshot.quotas.len(), 2);
         assert!(snapshot.events.is_empty());
+    }
+
+    #[test]
+    fn parse_preserves_source_observed_at() {
+        let raw = json!({
+            "observed_at": "2026-09-01T10:00:00Z",
+            "rate_limits": {"five_hour": {"used_percentage": 11.0}}
+        });
+        let snapshot = ClaudeCodeConnector::parse(&raw).unwrap();
+        let at = snapshot.quotas[0].provenance.observed_at;
+        assert_eq!(at.to_rfc3339(), "2026-09-01T10:00:00+00:00");
     }
 }

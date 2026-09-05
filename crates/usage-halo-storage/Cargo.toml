@@ -8,6 +8,7 @@ license.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 uuid.workspace = true
 usage-halo-core = { path = "../usage-halo-core" }

@@ -1,6 +1,3 @@
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS provider_accounts (
   id TEXT PRIMARY KEY,
   provider TEXT NOT NULL,

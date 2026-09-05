@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use usage_halo_core::{SourceAuthority, UsageEvent};
 
+pub mod policy;
+
 /// Reconciles only events that carry an explicit reconciliation identity.
 /// Events without one are intentionally preserved to avoid false merges.
 pub fn select_authoritative_events(events: Vec<UsageEvent>) -> Vec<UsageEvent> {

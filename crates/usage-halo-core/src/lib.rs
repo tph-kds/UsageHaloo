@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+pub mod contracts;
+pub mod time;
+
 pub type Result<T> = std::result::Result<T, ConnectorError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -215,6 +218,10 @@ pub trait UsageConnector: Send + Sync {
 
 pub fn epoch_seconds_to_utc(value: i64) -> Option<DateTime<Utc>> {
     DateTime::<Utc>::from_timestamp(value, 0)
+}
+
+pub fn epoch_millis_to_utc(value: i64) -> Option<DateTime<Utc>> {
+    DateTime::<Utc>::from_timestamp_millis(value)
 }
 
 #[cfg(test)]

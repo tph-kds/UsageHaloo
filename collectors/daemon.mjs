@@ -105,7 +105,11 @@ export async function tickOnce(nowMs = Date.now()) {
   saveState(state);
   const pruned = prune(90);
   let fired = [];
-  try { fired = evaluateAll(DEFAULT_RULES, { 'budget:percent': 62 }, nowMs); } catch {}
+  // P0-04: alert evaluation receives only real metrics. There is no
+  // production budget-percent source yet, so the budget rule gets null and
+  // stays in `insufficient_data` (evaluateAll skips null values) instead of
+  // firing off a hardcoded constant.
+  try { fired = evaluateAll(DEFAULT_RULES, { 'budget:percent': null }, nowMs); } catch {}
   // Converged snapshot cache for file-store consumers (Tauri shell, widgets).
   let cacheWritten = false;
   try {

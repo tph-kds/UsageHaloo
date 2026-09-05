@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+chrono.workspace = true
+sha2.workspace = true
 usage-halo-core = { path = "../usage-halo-core" }
 
 [dev-dependencies]

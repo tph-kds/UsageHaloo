@@ -259,7 +259,7 @@ By participating, you agree to keep the project welcoming and professional. Hara
 
 ## License
 
-**MIT** for this scaffold. Provider names, trademarks, and logos remain the property of their respective owners — see [`docs/12_BRAND_ASSETS.md`](./docs/12_BRAND_ASSETS.md) for attribution guidance.
+**Apache-2.0** — see [`LICENSE`](./LICENSE). Provider names, trademarks, and logos remain the property of their respective owners — see [`docs/12_BRAND_ASSETS.md`](./docs/12_BRAND_ASSETS.md) for attribution guidance.
 
 ---
 

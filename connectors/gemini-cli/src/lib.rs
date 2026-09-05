@@ -27,6 +27,12 @@ pub fn normalize(metric: GeminiTokenMetric) -> UsageEvent {
         "tool" => tokens.tool = Some(metric.value),
         _ => {}
     }
+    // P0-05: honor the OTLP observation time when the receiver supplies one;
+    // only fall back to receipt time for legacy payloads without it.
+    let observed_at = metric
+        .observed_unix_ms
+        .and_then(usage_halo_core::epoch_millis_to_utc)
+        .unwrap_or_else(Utc::now);
 
     UsageEvent {
         id: Uuid::new_v4(),
@@ -59,7 +65,7 @@ pub fn normalize(metric: GeminiTokenMetric) -> UsageEvent {
             scope: SourceScope::Device,
             authority: SourceAuthority::ProviderTelemetry,
             freshness: FreshnessClass::Live,
-            observed_at: Utc::now(),
+            observed_at,
             provider_timestamp: None,
             confidence: 1.0,
         },
