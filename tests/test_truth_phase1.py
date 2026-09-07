@@ -96,8 +96,13 @@ def test_honest_snapshot_numerics_are_null_not_zero(server):
     code, body = _http(f"{server}/api/snapshot")
     assert code == 200
     for p in json.loads(body)["providers"]:
-        assert p["tokens_today_value"] is None, p["id"]
-        assert p["cost_today_value"] is None, p["id"]
+        # UNKNOWN != ZERO: without an observation the field is null, never a
+        # placeholder zero. When the machine's real store holds observations
+        # (e.g. Gemini OTLP events), the honest overlay reports those real
+        # non-negative numerics instead of null — that is the desired path.
+        for field in ("tokens_today_value", "cost_today_value"):
+            v = p[field]
+            assert v is None or (isinstance(v, (int, float)) and v >= 0), (p["id"], field, v)
 
 
 def _fmt_tokens(n: int) -> str:

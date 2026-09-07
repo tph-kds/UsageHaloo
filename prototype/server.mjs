@@ -425,6 +425,59 @@ function latestRealSpoolRecord() {
 function isDemoRequest(url) {
   return url.searchParams.get('demo') === '1' || process.env.SAMPLE_MODE === '1';
 }
+
+// ---- real store-backed overlays (no invented numbers) ---------------------
+// Reads the immutable file store (~/.usagehalo/store/) written by ingest
+// endpoints and the daemon. All rows flow through reconciliation; missing
+// dimensions stay null and never become zero.
+function readQuotaSnapshots(limit = 2000) {
+  try {
+    const file = path.join(os.homedir(), '.usagehalo', 'store', 'quota_snapshots.jsonl');
+    const data = fs.readFileSync(file, 'utf8').trim();
+    if (!data) return [];
+    return data.split(/\r?\n/).filter(Boolean).slice(-limit).map((l) => {
+      try { return JSON.parse(l); } catch { return null; }
+    }).filter(Boolean);
+  } catch { return []; }
+}
+
+function aggregateStoreEvents() {
+  let events = [];
+  try { events = reconcileEvents(readEvents(5000)); } catch { events = []; }
+  const byProvider = new Map();
+  const models = [];
+  for (const e of events) {
+    const key = e.provider || e.billing_owner;
+    if (!key) continue;
+    const cur = byProvider.get(key) || { tokens: 0, cost: 0, requests: 0, hasTokens: false, hasCost: false, n: 0, latest: null };
+    const t = (e.input_tokens || 0) + (e.output_tokens || 0);
+    if (e.input_tokens != null || e.output_tokens != null) { cur.tokens += t; cur.hasTokens = true; }
+    if (e.provider_cost != null) { cur.cost += e.provider_cost; cur.hasCost = true; }
+    if (e.requests != null) cur.requests += e.requests;
+    cur.n++;
+    if (e.observed_at && (!cur.latest || String(e.observed_at) > String(cur.latest))) cur.latest = e.observed_at;
+    byProvider.set(key, cur);
+    if (e.model) {
+      models.push({
+        surface: e.provider || e.billing_owner || 'unknown',
+        model_provider: e.model_provider || e.provider || 'unknown',
+        billing_owner: e.billing_owner || e.provider || 'unknown',
+        model: e.model,
+        tokens: t,
+        cost: e.provider_cost != null ? `$${Number(e.provider_cost).toFixed(2)}` : 'Cost unavailable',
+      });
+    }
+  }
+  // Collapse models to one row per (surface, model): billing owner invariant kept.
+  const collapsed = new Map();
+  for (const m of models) {
+    const k = `${m.surface}|${m.model}|${m.billing_owner}`;
+    const cur = collapsed.get(k) || { ...m, tokens: 0 };
+    cur.tokens += m.tokens;
+    collapsed.set(k, cur);
+  }
+  return { byProvider, models: [...collapsed.values()].sort((a, b) => b.tokens - a.tokens).slice(0, 24) };
+}
 function snapshotLive(url) {
   const registry = loadRegistry();
   if (url && isDemoRequest(url)) return determinSnapshot(registry, latestSpoolRecord());
@@ -495,13 +548,73 @@ async function snapshotWithLive(url) {
   const cl = live['claude-code'];
   // P0-09: a real spool record exists even when stale. Stale real data keeps
   // its values with a real (non-sample) provenance and the computed
-  // freshness — it is never relabeled sample and never hidden.
+  // freshness — it is never relabeled sample and never hidden. Freshness and
+  // health always follow the spool age; a stale spool is never shown as
+  // live/healthy (that contradiction masked staleness in the showcase).
   if (cl && 'observed_at' in cl) {
     const e = base.providers.find((p) => p.id === 'claude-code');
     if (e) {
       e.live = !!cl.live;
-      e.provenance = { source: 'claude_code_statusline', scope: 'account', freshness: cl.freshness || 'unknown', authority: 'provider_telemetry', sample: false };
+      e.freshness = cl.freshness || 'unknown';
+      e.health = cl.live ? 'healthy' : (cl.freshness && cl.freshness !== 'unknown' ? cl.freshness : 'stale');
+      e.observed_at = cl.observed_at || null;
+      e.age_seconds = cl.age_seconds ?? null;
+      e.provenance = { source: 'claude_code_statusline', scope: 'account', freshness: e.freshness, authority: 'provider_telemetry', sample: false };
     }
+  }
+  // Real store overlays: reconciled usage events → tokens/cost/models;
+  // daemon quota snapshots → Codex + polled-provider quota windows.
+  // Demo mode keeps its synthetic generator untouched; honest mode only
+  // ever overlays rows that were actually observed.
+  if (!demoMode) {
+    try {
+      const { byProvider, models } = aggregateStoreEvents();
+      for (const p of base.providers) {
+        const agg = byProvider.get(p.id);
+        if (!agg) continue;
+        if (agg.hasTokens) {
+          p.tokensToday = agg.tokens >= 1_000_000 ? `${(agg.tokens / 1_000_000).toFixed(2)}M` : agg.tokens >= 1000 ? `${(agg.tokens / 1000).toFixed(1)}K` : `${agg.tokens}`;
+          p.tokens_today_value = agg.tokens;
+        }
+        if (agg.hasCost) {
+          p.costToday = `$${agg.cost.toFixed(2)}`;
+          p.cost_today_value = Number(agg.cost.toFixed(2));
+        }
+        if (agg.requests > 0) p.requestsToday = agg.requests;
+        if (agg.latest) {
+          p.observed_at = agg.latest;
+          const ageMs = Date.now() - new Date(agg.latest).getTime();
+          if (Number.isFinite(ageMs) && ageMs >= 0) p.age_seconds = Math.round(ageMs / 1000);
+        }
+        if (agg.n > 0 && !p.live) {
+          p.live = true;
+          p.source = p.source && p.source !== p.sourceMode ? p.source : 'instrumented_store';
+          p.freshness = 'fresh';
+          p.health = 'healthy';
+          p.provenance = { source: p.source, scope: p.scope, freshness: 'fresh', authority: 'instrumented_response', sample: false };
+        }
+      }
+      if (models.length && base.models.length === 0) base.models = models;
+    } catch { /* store overlay is best-effort; honest nulls remain */ }
+    try {
+      const quotas = readQuotaSnapshots();
+      const latestByProvider = new Map();
+      for (const q of quotas) {
+        if (q == null || !q.provider) continue;
+        const cur = latestByProvider.get(q.provider);
+        if (!cur || String(q.observed_at) > String(cur.observed_at)) latestByProvider.set(q.provider, q);
+      }
+      for (const [pid, q] of latestByProvider) {
+        const e = base.providers.find((p) => p.id === pid);
+        if (!e || typeof q.used_percent !== 'number') continue;
+        e.primaryPercent = Math.max(0, Math.min(100, Math.round(q.used_percent)));
+        e.source = q.source || 'quota_snapshot';
+        e.freshness = q.freshness || 'fresh';
+        e.health = 'healthy';
+        e.live = true;
+        e.provenance = { source: e.source, scope: q.scope || 'account', freshness: e.freshness, authority: 'provider_telemetry', sample: false };
+      }
+    } catch { /* quota overlay is best-effort */ }
   }
   base.detected = detected;
   base.live = live;
@@ -512,11 +625,45 @@ async function snapshotWithLive(url) {
   // Claude spool exists. Honest-empty default reports sample_data:false.
   if (!demoMode) {
     const hasLiveSpool = (() => { try { return !!readClaudeSpool().live; } catch { return false; } })();
-    const hasAnyLive = hasLiveSpool || !!(or && or.live) || !!(ol && ol.live) || !!(lm && lm.live);
+    const hasAnyLive = hasLiveSpool || !!(or && or.live) || !!(ol && ol.live) || !!(lm && lm.live)
+      || base.providers.some((p) => p.live);
     base.sample_data = false;
     base.has_live_data = hasAnyLive;
   }
   return base;
+}
+
+// Real activity buckets from the immutable store (powers the showcase
+// heatmap + trend). Query: ?from=ISO&to=ISO&metric=tokens|cost|requests.
+// Buckets are UTC calendar days; empty store → empty buckets, never a
+// generated pattern.
+function activityBuckets(fromIso, toIso, metric = 'tokens') {
+  let events = [];
+  try { events = reconcileEvents(readEvents(5000)); } catch { events = []; }
+  const from = new Date(fromIso).getTime();
+  const to = new Date(toIso).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+    return { buckets: [], metric, error: 'invalid_range' };
+  }
+  const days = Math.min(62, Math.max(1, Math.ceil((to - from) / 86400_000)));
+  const sums = new Array(days).fill(0);
+  for (const e of events) {
+    const t = new Date(e.observed_at).getTime();
+    if (!Number.isFinite(t) || t < from || t >= to) continue;
+    const i = Math.min(days - 1, Math.floor((t - from) / 86400_000));
+    if (metric === 'cost') sums[i] += Number(e.provider_cost) || 0;
+    else if (metric === 'requests') sums[i] += Number(e.requests) || 0;
+    else sums[i] += (Number(e.input_tokens) || 0) + (Number(e.output_tokens) || 0);
+  }
+  const max = Math.max(1, ...sums);
+  return {
+    metric,
+    buckets: sums.map((v, i) => ({
+      day: new Date(from + i * 86400_000).toISOString().slice(0, 10),
+      value: v,
+      level: v <= 0 ? 0 : v / max > 0.75 ? 4 : v / max > 0.5 ? 3 : v / max > 0.25 ? 2 : 1,
+    })),
+  };
 }
 function snapshot(url) {
   return snapshotLive(url);
@@ -607,6 +754,36 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok:true, runtime:'prototype', port:PORT, providers: loadRegistry().length, platform: os.platform() });
   if (req.method === 'GET' && url.pathname === '/api/snapshot') return json(res, 200, await snapshotWithLive(url));
+  if (req.method === 'GET' && url.pathname === '/api/activity-buckets') {
+    const now = Date.now();
+    const to = url.searchParams.get('to') || new Date(now).toISOString();
+    const from = url.searchParams.get('from') || new Date(now - 28 * 86400_000).toISOString();
+    return json(res, 200, { generated_at: new Date().toISOString(), ...activityBuckets(from, to, url.searchParams.get('metric') || 'tokens') });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/quotas') {
+    // Latest quota window per limit_id for one provider (or all when
+    // ?provider= is absent). Powers the per-provider detail view.
+    const only = url.searchParams.get('provider');
+    const latest = new Map();
+    for (const q of readQuotaSnapshots()) {
+      if (!q || !q.provider || !q.limit_id) continue;
+      if (only && q.provider !== only) continue;
+      const k = `${q.provider}|${q.limit_id}`;
+      const cur = latest.get(k);
+      if (!cur || String(q.observed_at) > String(cur.observed_at)) latest.set(k, q);
+    }
+    return json(res, 200, {
+      generated_at: new Date().toISOString(),
+      provider: only || null,
+      windows: [...latest.values()].map((q) => ({
+        provider: q.provider, limit_id: q.limit_id, label: q.label || q.limit_id,
+        used_percent: q.used_percent ?? null, used_value: q.used_value ?? null,
+        provider_cost: q.provider_cost ?? null, currency: q.currency || null,
+        resets_at: q.resets_at || null, observed_at: q.observed_at || null,
+        source: q.source || null, freshness: q.freshness || null,
+      })),
+    });
+  }
   if (req.method === 'GET' && url.pathname === '/api/projection') {
     const tz = url.searchParams.get('timezone') || 'UTC';
     const r = runProjection(['overview', '--db', projectionDb(), '--timezone', tz]);

@@ -1,34 +1,30 @@
 <script lang="ts">
   import type { ProviderView } from '../types';
+  import Logo from './Logo.svelte';
+  import { costDisplay, healthLabel } from '../lifecycle';
   let { provider } = $props<{ provider: ProviderView }>();
 </script>
 
-<div class="popover glass">
+<div class="popover">
   <header>
-    <div class="title"><span class="mini" style={`border-color:${provider.accent}66`}>{provider.monogram}</span><span>{provider.name}<small>{provider.vendor ?? ''}</small></span></div>
-    <span class:live={provider.live || provider.freshness === 'live'} class="freshness">{provider.live ? '● Live' : provider.freshness}</span>
+    <div class="title"><Logo monogram={provider.monogram} accent={provider.accent} icon={provider.icon} label={`${provider.name} logo`} /><span>{provider.name}<small>{provider.vendor ?? ''}</small></span></div>
+    <span class="freshness" data-f={provider.collectorHealth ?? provider.freshness}>{healthLabel((provider.collectorHealth as never) ?? undefined) === 'Unknown' ? provider.freshness : healthLabel((provider.collectorHealth as never) ?? undefined)}</span>
   </header>
 
   <section class="quota">
-    <div class="quota-line"><span>{provider.primaryLabel}</span><strong>{provider.primaryPercent == null ? '—' : `${provider.primaryPercent}%`}</strong></div>
-    <div class="bar"><span style={`width:${provider.primaryPercent ?? 0}%;background:${provider.accent}`}></span></div>
-    <div class="meta"><span>Primary</span><span>{provider.primaryReset ? `Resets ${provider.primaryReset}` : 'No reset'}</span></div>
+    <div class="quota-line"><span>{provider.primaryLabel}</span><strong>{provider.primaryPercent == null ? 'No observations yet' : `${provider.primaryPercent}%`}</strong></div>
+    {#if provider.primaryPercent != null}
+      <div class="bar"><span style={`width:${provider.primaryPercent}%;background:${provider.accent}`}></span></div>
+    {/if}
+    <div class="meta"><span>{provider.live ? 'Live quota window' : 'Current quota window'}</span><span>{provider.primaryReset ? `Resets ${provider.primaryReset}` : 'No reset reported'}</span></div>
   </section>
 
-  {#if provider.secondaryLabel}
-    <section class="quota">
-      <div class="quota-line"><span>{provider.secondaryLabel}</span><strong>{provider.secondaryPercent == null ? '—' : `${provider.secondaryPercent}%`}</strong></div>
-      <div class="bar"><span style={`width:${provider.secondaryPercent ?? 0}%;background:${provider.accent};opacity:.72`}></span></div>
-      <div class="meta"><span>Secondary</span><span>{provider.secondaryReset ?? ''}</span></div>
-    </section>
-  {/if}
-
   <div class="stats">
-    <div><span>Tokens</span><strong>{provider.tokensToday ?? '—'}</strong></div>
-    <div><span>Cost</span><strong>{provider.costToday ?? '—'}</strong></div>
+    <div><span>Tokens</span><strong>{provider.tokensToday ?? 'No observations yet'}</strong></div>
+    <div><span>Cost</span><strong>{costDisplay(provider.costToday, provider.cost_today_value)}</strong></div>
     <div><span>Scope</span><strong>{provider.scope}</strong></div>
   </div>
-  <footer><i class:live={provider.live}></i>{provider.source} · {provider.scope} · {provider.live ? 'live' : 'sample'}</footer>
+  <footer><i class:live={provider.live}></i>{provider.source} · {provider.scope} · {provider.live ? 'collecting' : 'not collecting'}</footer>
 </div>
 
 <style>
