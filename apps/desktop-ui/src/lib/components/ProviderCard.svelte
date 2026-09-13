@@ -1,20 +1,40 @@
 <script lang="ts">
   import type { ProviderConnection, ProviderView } from '../types';
+  import type { ProviderSnapshotDisplay } from '../contracts';
+  import { formatRelativeTime, honestFraction, isUserVisibleValue, resolveHeadline } from '../contracts';
   import Logo from './Logo.svelte';
   import { costDisplay, healthLabel, planDisplay } from '../lifecycle';
   import { catalogById } from '../catalog';
 
-  let { provider, connection, onToggle, onRemove, onDetails, onConnect } = $props<{
+  let { provider, connection, onToggle, onRemove, onDetails, onConnect, snapshot = null, headlineMetricId = null } = $props<{
     provider: ProviderView;
     connection?: ProviderConnection;
     onToggle: (id: string, enabled: boolean) => void;
     onRemove: (id: string) => void;
     onDetails: (id: string) => void;
     onConnect: (providerId: string) => void;
+    snapshot?: ProviderSnapshotDisplay | null;
+    headlineMetricId?: string | null;
   }>();
 
   const def = $derived(catalogById(provider.id));
   const connected = $derived(!!connection);
+  const v2Headline = $derived(snapshot ? resolveHeadline(snapshot.windows, headlineMetricId ?? snapshot.headline_metric_id) : null);
+  const v2Fraction = $derived(v2Headline ? honestFraction(v2Headline.used, v2Headline.limit, v2Headline.used_fraction) : null);
+  const v2Visible = $derived(snapshot ? isUserVisibleValue(snapshot.health_state) : true);
+
+  function v2ReasonLabel(s: ProviderSnapshotDisplay['health_state']): string {
+    switch (s) {
+      case 'unsupported': return 'Unsupported';
+      case 'unavailable': return 'Unavailable';
+      case 'needs_auth': return 'Auth required';
+      case 'rate_limited': return 'Rate limited';
+      case 'disabled': return 'Disabled';
+      case 'demo': return 'Demo';
+      case 'error': return 'Error';
+      default: return 'Unavailable';
+    }
+  }
 </script>
 
 <article class="card" aria-label={`${provider.name} provider card`}>
@@ -26,7 +46,9 @@
         <small>{provider.vendor ?? ''}{def ? ` · ${def.group}` : ''}</small>
       </div>
     </div>
-    {#if connected}
+    {#if snapshot && (snapshot.health_state === 'live' || snapshot.health_state === 'stale')}
+      <span class="health" data-h={snapshot.health_state === 'live' ? 'healthy' : 'stale'}>● {snapshot.health_state === 'live' ? 'LIVE' : 'STALE'} · {formatRelativeTime(snapshot.collected_at)}</span>
+    {:else if connected}
       <span class="health" data-h={provider.collectorHealth ?? 'unknown'}>● {healthLabel(provider.collectorHealth)}</span>
     {:else}
       <span class="health" data-h="unknown">{provider.stage === 'detected' ? 'Detected locally' : 'Not connected'}</span>
@@ -37,7 +59,19 @@
     <div class="today">
       <div><span>Tokens</span><strong>{provider.tokensToday ?? 'No observations yet'}</strong></div>
       <div><span>Cost</span><strong>{costDisplay(provider.costToday, provider.cost_today_value)}</strong></div>
+      {#if snapshot}
+        {#if !v2Visible}
+          {@const reason = v2ReasonLabel(snapshot.health_state)}
+          <!-- Unknown is never 0%: suppressed states render an em dash plus reason. -->
+          <div><span>Quota</span><strong>— {reason}</strong></div>
+        {:else if v2Fraction == null}
+          <div><span>Quota</span><strong>—{#if snapshot.health_state === 'stale'} <span class="stale-mark">stale</span>{/if}</strong></div>
+        {:else}
+          <div><span>Quota</span><strong>{Math.round(v2Fraction * 100)}% {v2Headline?.label ?? ''}{#if snapshot.health_state === 'stale'} <span class="stale-mark">stale</span>{/if}</strong></div>
+        {/if}
+      {:else}
       <div><span>Quota</span><strong>{provider.primaryPercent != null ? `${provider.primaryPercent}% ${provider.primaryLabel}` : 'No observations yet'}</strong></div>
+      {/if}
     </div>
     <p class="meta">Last sync: {provider.lastSeenAt ? new Date(provider.lastSeenAt).toLocaleString() : 'never'} · Source: {provider.source} · {connection ? planDisplay(connection.plan, connection.plan_source) : ''}</p>
     <footer>
@@ -78,5 +112,6 @@
   .ghost { border: 1px solid var(--line); background: transparent; color: inherit; padding: 8px 12px; border-radius: 10px; cursor: pointer; font-size: 12px; }
   .primary { border: 0; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 12px; }
   .notconn { font-size: 12px; color: var(--muted); }
+  .stale-mark { font-size: 10px; color: var(--warn); text-transform: uppercase; letter-spacing: .06em; }
   .switch { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 600; cursor: pointer; }
 </style>
