@@ -303,6 +303,7 @@ struct SnapshotParts {
     windows: Vec<UsageWindow>,
     active_source_id: Option<&'static str>,
     last_successful_at: Option<DateTime<Utc>>,
+    observed_at: Option<DateTime<Utc>>,
 }
 
 fn base_snapshot(p: SnapshotParts) -> ProviderSnapshot {
@@ -312,6 +313,7 @@ fn base_snapshot(p: SnapshotParts) -> ProviderSnapshot {
         account_label: None,
         collected_at: p.now,
         last_successful_at: p.last_successful_at,
+        observed_at: p.observed_at,
         headline_metric_id: Some("five_hour".into()),
         capabilities: vec!["quota_windows".into()],
         active_source_id: p.active_source_id.map(str::to_string),
@@ -348,6 +350,7 @@ pub fn snapshot_from_spool_payload(
             windows: vec![],
             active_source_id: Some("statusline-spool"),
             last_successful_at: None,
+            observed_at: Some(observed),
         });
     }
 
@@ -366,6 +369,7 @@ pub fn snapshot_from_spool_payload(
                 windows: vec![],
                 active_source_id: Some("statusline-spool"),
                 last_successful_at: None,
+                observed_at: Some(observed),
             });
         }
         (Some(_), None) => {
@@ -382,6 +386,7 @@ pub fn snapshot_from_spool_payload(
                 windows: vec![],
                 active_source_id: Some("statusline-spool"),
                 last_successful_at: None,
+                observed_at: Some(observed),
             });
         }
         _ => {}
@@ -401,6 +406,7 @@ pub fn snapshot_from_spool_payload(
             windows: vec![],
             active_source_id: Some("statusline-spool"),
             last_successful_at: None,
+            observed_at: Some(observed),
         });
     }
 
@@ -451,6 +457,7 @@ pub fn snapshot_from_spool_payload(
             windows,
             active_source_id: Some("statusline-spool"),
             last_successful_at: None,
+            observed_at: Some(observed),
         });
     }
     if windows.is_empty() {
@@ -463,6 +470,7 @@ pub fn snapshot_from_spool_payload(
             windows,
             active_source_id: Some("statusline-spool"),
             last_successful_at: None,
+            observed_at: Some(observed),
         });
     }
     base_snapshot(SnapshotParts {
@@ -474,6 +482,7 @@ pub fn snapshot_from_spool_payload(
         windows,
         active_source_id: Some("statusline-spool"),
         last_successful_at: Some(now),
+        observed_at: Some(observed),
     })
 }
 
@@ -494,6 +503,7 @@ pub fn snapshot_from_stats_telemetry(now: DateTime<Utc>) -> ProviderSnapshot {
         windows: vec![],
         active_source_id: None,
         last_successful_at: None,
+        observed_at: None,
     })
 }
 
@@ -654,6 +664,7 @@ impl ProviderAdapter for ClaudeCodeProviderAdapter {
             windows: vec![],
             active_source_id: None,
             last_successful_at: None,
+            observed_at: None,
         }))
     }
 

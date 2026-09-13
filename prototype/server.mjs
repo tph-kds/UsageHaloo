@@ -485,6 +485,85 @@ function snapshotLive(url) {
   return honestSnapshot(registry, record || {});
 }
 
+// Mirror of connectors/claude-code/src/lib.rs ClaudeCodeProviderAdapter (Phase B1).
+const CLAUDE_V2_STALE_MS = 24 * 60 * 60 * 1000;
+const CLAUDE_V2_WINDOWS = [['five_hour', '5-hour limit'], ['seven_day', '7-day limit']];
+
+function claudeV2Home() {
+  try {
+    const h = process.env.HOME || process.env.USERPROFILE;
+    if (h && h.trim()) return h;
+    return os.homedir();
+  } catch { return null; }
+}
+
+// Newest non-empty spool line only: slice from the end instead of parsing
+// every line, since the spool is append-only. Returns { record, mtimeMs }.
+function claudeV2NewestLine(file) {
+  const st = fs.statSync(file);
+  const text = fs.readFileSync(file, 'utf8');
+  let end = text.length;
+  while (end > 0 && (text[end - 1] === '\n' || text[end - 1] === '\r' || text[end - 1] === ' ' || text[end - 1] === '\t')) end--;
+  if (end <= 0) return null;
+  const nl = text.lastIndexOf('\n', end - 1);
+  const line = text.slice(nl + 1, end).trim();
+  if (!line) return null;
+  return { record: JSON.parse(line), mtimeMs: st.mtimeMs };
+}
+
+// Pure core over one spool record at explicit now (deterministic for tests).
+function claudeV2FromRecord(record, nowMs) {
+  const windows = [];
+  let invalid = false;
+  const rl = record != null && typeof record === 'object' ? record.rate_limits : null;
+  if (rl != null && typeof rl === 'object') {
+    for (const [id, label] of CLAUDE_V2_WINDOWS) {
+      const w = rl[id];
+      if (w == null || typeof w !== 'object' || w.used_percentage == null) continue;
+      const used = Number(w.used_percentage);
+      if (!Number.isFinite(used) || used < 0 || used > 100) { invalid = true; continue; }
+      let resets_at = null;
+      if (w.resets_at != null && Number.isFinite(Number(w.resets_at))) {
+        const d = new Date(Number(w.resets_at) * 1000);
+        if (!Number.isNaN(d.getTime())) resets_at = d.toISOString();
+      }
+      windows.push({ id, label, used_fraction: used / 100, resets_at, source_metric_id: id });
+    }
+  }
+  return { windows, invalid };
+}
+
+function claudeV2Snapshot(nowMs = Date.now()) {
+  const collected_at = new Date(nowMs).toISOString();
+  const base = (health_state, windows, active_source_id, observed_at = null) => ({
+    health_state, account_key: null, headline_metric_id: 'five_hour',
+    active_source_id, collected_at, observed_at, windows,
+  });
+  try {
+    const home = claudeV2Home();
+    if (!home) return base('unavailable', [], null);
+    let found = null;
+    for (const rel of ['.usagehalo/inbox/claude-code.jsonl', '.viusagever/inbox/claude-code.jsonl']) {
+      try {
+        found = claudeV2NewestLine(path.join(home, rel));
+        if (found) break;
+      } catch { /* try next candidate */ }
+    }
+    // stats-cache (~/.claude/stats-cache.json) is telemetry-only: its presence
+    // never creates windows, so both branches below stay at zero windows.
+    if (!found) return base('unavailable', [], null);
+    const { record, mtimeMs } = found;
+    let observedMs = Date.parse(record != null && typeof record === 'object' ? record.observed_at : null);
+    if (!Number.isFinite(observedMs)) observedMs = Number.isFinite(mtimeMs) ? mtimeMs : nowMs;
+    const observed_at = new Date(observedMs).toISOString();
+    if (nowMs - observedMs > CLAUDE_V2_STALE_MS) return base('stale', [], 'statusline-spool', observed_at);
+    const { windows, invalid } = claudeV2FromRecord(record, nowMs);
+    if (invalid) return base('error', windows, 'statusline-spool', observed_at);
+    if (windows.length === 0) return base('unavailable', [], 'statusline-spool', observed_at);
+    return base('live', windows, 'statusline-spool', observed_at);
+  } catch { return base('unavailable', [], null); }
+}
+
 async function snapshotWithLive(url) {
   const base = snapshotLive(url);
   const demoMode = base.demo_mode === true;
@@ -616,6 +695,11 @@ async function snapshotWithLive(url) {
       }
     } catch { /* quota overlay is best-effort */ }
   }
+  // Additive V2 display snapshot for the Claude Code card only.
+  try {
+    const e = base.providers.find((p) => p.id === 'claude-code');
+    if (e) e.v2 = claudeV2Snapshot();
+  } catch { /* v2 overlay is best-effort; base snapshot stands */ }
   base.detected = detected;
   base.live = live;
   base.live_overlay = true;

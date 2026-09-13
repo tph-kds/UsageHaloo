@@ -22,6 +22,7 @@
   const v2Headline = $derived(snapshot ? resolveHeadline(snapshot.windows, headlineMetricId ?? snapshot.headline_metric_id) : null);
   const v2Fraction = $derived(v2Headline ? honestFraction(v2Headline.used, v2Headline.limit, v2Headline.used_fraction) : null);
   const v2Visible = $derived(snapshot ? isUserVisibleValue(snapshot.health_state) : true);
+  const v2AgeIso = $derived(snapshot?.observed_at ?? snapshot?.collected_at ?? null);
 
   function v2ReasonLabel(s: ProviderSnapshotDisplay['health_state']): string {
     switch (s) {
@@ -47,7 +48,7 @@
       </div>
     </div>
     {#if snapshot && (snapshot.health_state === 'live' || snapshot.health_state === 'stale')}
-      <span class="health" data-h={snapshot.health_state === 'live' ? 'healthy' : 'stale'}>● {snapshot.health_state === 'live' ? 'LIVE' : 'STALE'} · {formatRelativeTime(snapshot.collected_at)}</span>
+      <span class="health" data-h={snapshot.health_state === 'live' ? 'healthy' : 'stale'}>● {snapshot.health_state === 'live' ? 'LIVE' : 'STALE'} · {formatRelativeTime(v2AgeIso)}</span>
     {:else if connected}
       <span class="health" data-h={provider.collectorHealth ?? 'unknown'}>● {healthLabel(provider.collectorHealth)}</span>
     {:else}
@@ -73,7 +74,7 @@
       <div><span>Quota</span><strong>{provider.primaryPercent != null ? `${provider.primaryPercent}% ${provider.primaryLabel}` : 'No observations yet'}</strong></div>
       {/if}
     </div>
-    <p class="meta">Last sync: {provider.lastSeenAt ? new Date(provider.lastSeenAt).toLocaleString() : 'never'} · Source: {provider.source} · {connection ? planDisplay(connection.plan, connection.plan_source) : ''}</p>
+    <p class="meta">Last sync: {provider.lastSeenAt ? new Date(provider.lastSeenAt).toLocaleString() : 'never'} · {#if snapshot?.active_source_id}Source: {snapshot.active_source_id} · {formatRelativeTime(v2AgeIso)}{:else}Source: {provider.source}{/if} · {connection ? planDisplay(connection.plan, connection.plan_source) : ''}</p>
     <footer>
       <button class="ghost" onclick={() => onDetails(provider.id)}>View details</button>
       <label class="switch">

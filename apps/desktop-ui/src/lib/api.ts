@@ -19,6 +19,7 @@ import type { ProviderView, SummaryMetric } from './types';
 import { providers as mockProviders, summaries as mockSummaries } from './mock';
 
 import { SCHEMA_VERSION } from './contracts';
+import type { ProviderSnapshotDisplay } from './contracts';
 
 export const USE_LIVE = true;
 
@@ -50,6 +51,8 @@ export interface SnapshotProvider {
   live?: boolean;
   installed?: boolean;
   configured?: boolean;
+  /** V2 display snapshot (Claude Code slice, Phase B1). Additive only. */
+  v2?: ProviderSnapshotDisplay | null;
 }
 
 export interface LiveSnapshot {
@@ -95,6 +98,9 @@ function liveProviderToView(p: SnapshotProvider): ProviderView {
     live: p.live,
     installed: p.installed,
     configured: p.configured,
+    v2: p.v2 ?? null,
+    snapshot: p.v2 ?? null,
+    headlineMetricId: p.v2?.headline_metric_id ?? null,
     enabled: true,
     pinned: true
   };

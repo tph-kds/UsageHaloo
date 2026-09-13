@@ -122,6 +122,7 @@ export interface ProviderSnapshotDisplay {
   account_key: string | null;
   account_label: string | null;
   collected_at: string;
+  observed_at: string | null;
   last_successful_at: string | null;
   headline_metric_id: string | null;
   capabilities: string[];

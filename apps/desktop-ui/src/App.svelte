@@ -314,7 +314,7 @@
       {#if connected.length}
         <section class="cards">
           {#each connected as p}
-            <ProviderCard provider={p} connection={connections.find((c) => c.id === p.connectionId)} onToggle={toggleConnection} onRemove={removeConnection} onDetails={openDetail} onConnect={(id) => openWizard(id)} />
+            <ProviderCard provider={p} snapshot={p.snapshot ?? null} headlineMetricId={p.headlineMetricId ?? null} connection={connections.find((c) => c.id === p.connectionId)} onToggle={toggleConnection} onRemove={removeConnection} onDetails={openDetail} onConnect={(id) => openWizard(id)} />
           {/each}
         </section>
       {:else}
@@ -324,14 +324,14 @@
       {#if detectedOnly.length}
         <section class="cards">
           {#each detectedOnly as p}
-            <ProviderCard provider={p} connection={undefined} onToggle={toggleConnection} onRemove={removeConnection} onDetails={openDetail} onConnect={(id) => openWizard(id)} />
+            <ProviderCard provider={p} snapshot={p.snapshot ?? null} headlineMetricId={p.headlineMetricId ?? null} connection={undefined} onToggle={toggleConnection} onRemove={removeConnection} onDetails={openDetail} onConnect={(id) => openWizard(id)} />
           {/each}
         </section>
       {:else}<p class="muted">No local installations detected. Detection never enables collection.</p>{/if}
       <h2 class="section-title">Available integrations ({available.length})</h2>
       <section class="cards">
         {#each available as p}
-          <ProviderCard provider={p} connection={undefined} onToggle={toggleConnection} onRemove={removeConnection} onDetails={openDetail} onConnect={(id) => openWizard(id)} />
+          <ProviderCard provider={p} snapshot={p.snapshot ?? null} headlineMetricId={p.headlineMetricId ?? null} connection={undefined} onToggle={toggleConnection} onRemove={removeConnection} onDetails={openDetail} onConnect={(id) => openWizard(id)} />
         {/each}
       </section>
 

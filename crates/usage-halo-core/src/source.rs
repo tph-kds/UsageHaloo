@@ -148,6 +148,9 @@ pub struct ProviderSnapshot {
     pub account_label: Option<String>,
     pub collected_at: DateTime<Utc>,
     pub last_successful_at: Option<DateTime<Utc>>,
+    /// Provider-side measurement time (spool observed_at or equivalent).
+    /// UI ages staleness against this, never against collection time.
+    pub observed_at: Option<DateTime<Utc>>,
     pub headline_metric_id: Option<String>,
     pub capabilities: Vec<String>,
     pub active_source_id: Option<String>,
@@ -331,6 +334,7 @@ mod tests {
             account_label: None,
             collected_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
             last_successful_at: None,
+            observed_at: None,
             headline_metric_id: None,
             capabilities: vec![],
             active_source_id: None,

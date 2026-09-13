@@ -11,12 +11,12 @@ lock_owner: main session
 ---
 # Execution State
 
-- Status: EXECUTING
+- Status: EXECUTING Phase B lane B1
 - Workflow: BROWN-LARGE
-- Approved gates: design rev1, plan rev1 (sha256:b6454470)
-- Current phase: Phase A task A1 (canonical contract)
-- Current wave: A1 unit 2 (migrate one provider card to UsageWindow + truth states)
-- Current task: card migration, then Phase A gate items A2–A4
+- Approved gates: design rev1, plan rev1 (sha256:b6454470), Phase A
+- Current phase: Phase B task B1 unit 1 done (adapter c2c525f fixtures + 5149d87 code, real probe PARTIAL)
+- Current wave: B1 unit 2 queued (real snapshot persistence + UI diagnostics wiring)
+- Current task: none blocked, continuing on request
 
 ## Completed
 - Mapped existing code via 2 explore subagents (frontend/backend/persistence + providers/auth/tests)
@@ -26,10 +26,10 @@ lock_owner: main session
 - Phase A1 unit 1 committed as ea639f2 (source.rs + lib.rs + contracts.ts). cargo test 27 passed, clippy clean, validate PASS, pytest 89 passed.
 
 ## Blockers
-- Awaiting human approval of DESIGN.md (rev1) before creating exactly one PLAN.md — execution BLOCKED by policy until then
+- none (Phase A gate approved, Phase B open)
 
 ## Next action
-- Human: approve / amend DESIGN.md rev1. Then: write PLAN.md, second human gate (plan approval + approved_plan_digest), then execute WP-by-WP with phase gates.
+- B1 unit 2 (persist real snapshot + UI diagnostics wiring), then B2 Codex slice.
 
 ## Last fresh evidence
 - python scripts/validate.py: PASS (2026-09-14, baseline 9e5be2f)

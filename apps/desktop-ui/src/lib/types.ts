@@ -1,5 +1,7 @@
 export type Freshness = 'live' | 'fresh' | 'hourly' | 'daily' | 'manual' | 'stale' | 'unknown' | string;
 
+import type { ProviderSnapshotDisplay } from './contracts';
+
 // ---- vNext lifecycle (§2, §6) ----
 // Detection is only a suggestion. Detection must never mean
 // connected, enabled, live, or actively used.
@@ -98,6 +100,10 @@ export type ProviderView = {
   collectorHealth?: CollectorHealth;
   lastSeenAt?: string | null;
   connectionId?: string | null;
+  /** V2 display snapshot passthrough (Claude Code slice, Phase B1). */
+  v2?: ProviderSnapshotDisplay | null;
+  snapshot?: ProviderSnapshotDisplay | null;
+  headlineMetricId?: string | null;
 };
 
 export type SummaryMetric = {
