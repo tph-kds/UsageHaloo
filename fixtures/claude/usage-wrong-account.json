@@ -1,0 +1,11 @@
+{
+  "observed_at": "2026-09-14T10:00:00Z",
+  "session_id": "REDACTED",
+  "version": "2.1.251",
+  "account_id": "org-B-observed",
+  "model": {"id": "claude-sonnet-4-6", "display_name": "Claude Sonnet 4.6"},
+  "rate_limits": {
+    "five_hour": {"used_percentage": 44, "resets_at": 1900000000},
+    "seven_day": {"used_percentage": 9, "resets_at": 1900500000}
+  }
+}

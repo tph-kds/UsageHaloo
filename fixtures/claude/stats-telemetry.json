@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "lastComputedDate": "2026-02-21",
+  "dailyActivity": [
+    {"date": "2026-02-21", "messageCount": 448, "sessionCount": 2, "toolCallCount": 142}
+  ],
+  "dailyModelTokens": [
+    {"date": "2026-02-21", "tokensByModel": {"claude-sonnet-4-6": 94582}}
+  ],
+  "modelUsage": {
+    "claude-sonnet-4-6": {
+      "inputTokens": 7847,
+      "outputTokens": 86735,
+      "cacheReadInputTokens": 25035152,
+      "cacheCreationInputTokens": 2070822,
+      "webSearchRequests": 0,
+      "costUSD": 0,
+      "contextWindow": 0,
+      "maxOutputTokens": 0
+    }
+  },
+  "totalSessions": 2,
+  "totalMessages": 448,
+  "longestSession": {
+    "sessionId": "REDACTED",
+    "duration": 3914908,
+    "messageCount": 249,
+    "timestamp": "2026-02-21T23:30:37.698Z"
+  },
+  "firstSessionDate": "REDACTED",
+  "hourCounts": {"5": 1, "6": 1}
+}
