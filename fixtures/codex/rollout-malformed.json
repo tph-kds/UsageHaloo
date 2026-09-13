@@ -1,0 +1,1 @@
+{"payload":{"rate_limits":{"credits":null,"individual_limit":null,"limit_id":"codex","limit_name":null,"plan_type":"plus","primary":{"used_percent":"1.0","window_minutes":10080},"rate_limit_reached_type":null,"secondary":null,"spend_control_reached":null}},"timestamp":"2026-09-10T12:00:00Z","type":"event_msg"}
