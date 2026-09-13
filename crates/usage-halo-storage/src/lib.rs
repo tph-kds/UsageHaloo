@@ -211,6 +211,77 @@ pub struct AlertRuleRow {
     pub cooldown_seconds: i64,
 }
 
+pub struct ProviderSnapshotInput<'a> {
+    pub id: &'a str,
+    pub provider_id: &'a str,
+    pub account_id: Option<&'a str>,
+    pub active_source_id: Option<&'a str>,
+    pub health_state: &'a str,
+    pub headline_metric_id: Option<&'a str>,
+    pub collected_at: &'a str,
+    pub last_successful_at: Option<&'a str>,
+    pub payload_version: i64,
+    pub normalized_payload: Option<&'a str>,
+}
+
+pub struct MetricObservationInput<'a> {
+    pub id: &'a str,
+    pub provider_snapshot_id: Option<&'a str>,
+    pub provider_id: &'a str,
+    pub account_id: Option<&'a str>,
+    pub metric_id: &'a str,
+    pub value_numeric: Option<f64>,
+    pub value_text: Option<&'a str>,
+    pub unit: Option<&'a str>,
+    pub status: &'a str,
+    pub fidelity: Option<&'a str>,
+    pub source_id: Option<&'a str>,
+    pub observed_at: &'a str,
+    pub fetched_at: &'a str,
+}
+
+pub struct ActivityEventInput<'a> {
+    pub id: &'a str,
+    pub provider_id: &'a str,
+    pub account_id: Option<&'a str>,
+    pub state: &'a str,
+    pub fidelity: Option<&'a str>,
+    pub source_id: Option<&'a str>,
+    pub observed_at: &'a str,
+    pub ended_at: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ProviderSnapshotRow {
+    pub id: String,
+    pub provider_id: String,
+    pub account_id: Option<String>,
+    pub active_source_id: Option<String>,
+    pub health_state: String,
+    pub headline_metric_id: Option<String>,
+    pub collected_at: String,
+    pub last_successful_at: Option<String>,
+    pub payload_version: i64,
+    pub normalized_payload: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct MetricObservationRow {
+    pub id: String,
+    pub provider_snapshot_id: Option<String>,
+    pub provider_id: String,
+    pub account_id: Option<String>,
+    pub metric_id: String,
+    pub value_numeric: Option<f64>,
+    pub value_text: Option<String>,
+    pub unit: Option<String>,
+    pub status: String,
+    pub fidelity: Option<String>,
+    pub source_id: Option<String>,
+    pub observed_at: String,
+    pub fetched_at: String,
+}
+
 impl Storage {
     pub async fn connect(url: &str) -> anyhow::Result<Self> {
         // WAL + foreign keys are connection properties, not migration steps:
@@ -834,6 +905,237 @@ impl Storage {
             .context("get setting")
     }
 
+    // -- v2 provider sources / snapshots / observations -------------------------
+    //
+    // UTC RFC3339 text in, no timezone math here: callers convert
+    // Today/Week/Month boundaries via `usage_halo_core::time` before querying.
+
+    /// Upsert a per-source fetch attempt. The row is created on first sight
+    /// with default enabled/priority/fidelity; on conflict only the attempt
+    /// fields move, so scheduler tuning is never clobbered by a fetch tick.
+    /// Success clears the error/backoff state while preserving nothing else;
+    /// failure preserves `last_success_at`.
+    pub async fn record_source_attempt(
+        &self,
+        provider_id: &str,
+        source_id: &str,
+        success: bool,
+        error_code: Option<&str>,
+        backoff_until: Option<&str>,
+        now_text: &str,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"INSERT INTO provider_sources (
+                provider_id, source_id, last_attempt_at, last_success_at,
+                last_error_code, backoff_until
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider_id, source_id) DO UPDATE SET
+                last_attempt_at = excluded.last_attempt_at,
+                last_success_at = COALESCE(excluded.last_success_at, provider_sources.last_success_at),
+                last_error_code = excluded.last_error_code,
+                backoff_until = excluded.backoff_until"#,
+        )
+        .bind(provider_id)
+        .bind(source_id)
+        .bind(now_text)
+        .bind(if success { Some(now_text) } else { None })
+        .bind(if success { None } else { error_code })
+        .bind(if success { None } else { backoff_until })
+        .execute(&self.pool)
+        .await
+        .context("record source attempt")?;
+        Ok(())
+    }
+
+    /// Backoff deadline read back from SQLite, so it survives a restart
+    /// without any in-memory scheduler state.
+    pub async fn source_backoff_until(
+        &self,
+        provider_id: &str,
+        source_id: &str,
+    ) -> anyhow::Result<Option<String>> {
+        sqlx::query_scalar(
+            "SELECT backoff_until FROM provider_sources WHERE provider_id = ? AND source_id = ?",
+        )
+        .bind(provider_id)
+        .bind(source_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("read source backoff")
+        .map(|row: Option<Option<String>>| row.flatten())
+    }
+
+    /// Insert a normalized provider snapshot. Retries reuse the same caller
+    /// id and collapse via INSERT OR IGNORE (never duplicate).
+    pub async fn insert_provider_snapshot(
+        &self,
+        s: ProviderSnapshotInput<'_>,
+    ) -> anyhow::Result<InsertOutcome> {
+        let rows = sqlx::query(
+            r#"INSERT OR IGNORE INTO provider_snapshots (
+                id, provider_id, account_id, active_source_id, health_state,
+                headline_metric_id, collected_at, last_successful_at,
+                payload_version, normalized_payload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(s.id)
+        .bind(s.provider_id)
+        .bind(s.account_id)
+        .bind(s.active_source_id)
+        .bind(s.health_state)
+        .bind(s.headline_metric_id)
+        .bind(s.collected_at)
+        .bind(s.last_successful_at)
+        .bind(s.payload_version)
+        .bind(s.normalized_payload)
+        .execute(&self.pool)
+        .await
+        .context("insert provider snapshot")?
+        .rows_affected();
+        Ok(InsertOutcome {
+            inserted: rows == 1,
+        })
+    }
+
+    /// Insert one metric observation. Same id-collapses retry semantics.
+    pub async fn insert_metric_observation(
+        &self,
+        o: &MetricObservationInput<'_>,
+    ) -> anyhow::Result<InsertOutcome> {
+        let rows = sqlx::query(
+            r#"INSERT OR IGNORE INTO metric_observations (
+                id, provider_snapshot_id, provider_id, account_id, metric_id,
+                value_numeric, value_text, unit, status, fidelity, source_id,
+                observed_at, fetched_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(o.id)
+        .bind(o.provider_snapshot_id)
+        .bind(o.provider_id)
+        .bind(o.account_id)
+        .bind(o.metric_id)
+        .bind(o.value_numeric)
+        .bind(o.value_text)
+        .bind(o.unit)
+        .bind(o.status)
+        .bind(o.fidelity)
+        .bind(o.source_id)
+        .bind(o.observed_at)
+        .bind(o.fetched_at)
+        .execute(&self.pool)
+        .await
+        .context("insert metric observation")?
+        .rows_affected();
+        Ok(InsertOutcome {
+            inserted: rows == 1,
+        })
+    }
+
+    /// Insert a batch of observations; returns (inserted, skipped).
+    pub async fn insert_metric_observations(
+        &self,
+        obs: &[MetricObservationInput<'_>],
+    ) -> anyhow::Result<(u64, u64)> {
+        let mut inserted = 0u64;
+        let mut skipped = 0u64;
+        for o in obs {
+            if self
+                .insert_metric_observation(o)
+                .await?
+                .inserted
+            {
+                inserted += 1;
+            } else {
+                skipped += 1;
+            }
+        }
+        Ok((inserted, skipped))
+    }
+
+    /// Insert one activity event. Same id-collapses retry semantics.
+    pub async fn insert_activity_event(
+        &self,
+        e: ActivityEventInput<'_>,
+    ) -> anyhow::Result<InsertOutcome> {
+        let rows = sqlx::query(
+            r#"INSERT OR IGNORE INTO activity_events (
+                id, provider_id, account_id, state, fidelity, source_id,
+                observed_at, ended_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(e.id)
+        .bind(e.provider_id)
+        .bind(e.account_id)
+        .bind(e.state)
+        .bind(e.fidelity)
+        .bind(e.source_id)
+        .bind(e.observed_at)
+        .bind(e.ended_at)
+        .execute(&self.pool)
+        .await
+        .context("insert activity event")?
+        .rows_affected();
+        Ok(InsertOutcome {
+            inserted: rows == 1,
+        })
+    }
+
+    /// Newest snapshot for a provider+account (account-aware: None matches
+    /// only account-less rows, mirroring `latest_quota`).
+    pub async fn latest_snapshot(
+        &self,
+        provider_id: &str,
+        account_id: Option<&str>,
+    ) -> anyhow::Result<Option<ProviderSnapshotRow>> {
+        let row: Option<ProviderSnapshotRow> = sqlx::query_as(
+            r#"SELECT id, provider_id, account_id, active_source_id, health_state,
+                headline_metric_id, collected_at, last_successful_at,
+                payload_version, normalized_payload
+              FROM provider_snapshots
+              WHERE provider_id = ?
+                AND (account_id = ? OR (? IS NULL AND account_id IS NULL))
+              ORDER BY collected_at DESC LIMIT 1"#,
+        )
+        .bind(provider_id)
+        .bind(account_id)
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("read latest snapshot")?;
+        Ok(row)
+    }
+
+    /// Observation history for a metric over `[from_utc, to_utc)`, ascending.
+    /// `account_id = None` returns all accounts; `Some` scopes to one.
+    pub async fn observation_history(
+        &self,
+        provider_id: &str,
+        metric_id: &str,
+        account_id: Option<&str>,
+        from_utc: &str,
+        to_utc: &str,
+    ) -> anyhow::Result<Vec<MetricObservationRow>> {
+        sqlx::query_as(
+            r#"SELECT id, provider_snapshot_id, provider_id, account_id, metric_id,
+                value_numeric, value_text, unit, status, fidelity, source_id,
+                observed_at, fetched_at
+              FROM metric_observations
+              WHERE provider_id = ? AND metric_id = ?
+                AND observed_at >= ? AND observed_at < ?
+                AND (? IS NULL OR account_id = ?)
+              ORDER BY observed_at ASC"#,
+        )
+        .bind(provider_id)
+        .bind(metric_id)
+        .bind(from_utc)
+        .bind(to_utc)
+        .bind(account_id)
+        .bind(account_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("read observation history")
+    }
+
     // -- rollups ----------------------------------------------------------------
     //
     // Idempotent rebuilds: DELETE the bucket scope, re-aggregate from
@@ -1209,7 +1511,7 @@ mod tests {
     #[tokio::test]
     async fn schema_version_tracks_migrations() {
         let s = migrated().await;
-        assert_eq!(s.schema_version().await.unwrap(), 3);
+        assert_eq!(s.schema_version().await.unwrap(), 4);
     }
 
     #[tokio::test]
@@ -1471,5 +1773,180 @@ mod tests {
             s.get_setting("timezone").await.unwrap().as_deref(),
             Some("Asia/Ho_Chi_Minh")
         );
+    }
+
+    fn snapshot<'a>(id: &'a str, account: Option<&'a str>, at: &'a str) -> ProviderSnapshotInput<'a> {
+        ProviderSnapshotInput {
+            id,
+            provider_id: "codex",
+            account_id: account,
+            active_source_id: Some("cli"),
+            health_state: "healthy",
+            headline_metric_id: Some("usage_pct"),
+            collected_at: at,
+            last_successful_at: Some(at),
+            payload_version: 1,
+            normalized_payload: Some("{}"),
+        }
+    }
+
+    fn observation<'a>(
+        id: &'a str,
+        account: Option<&'a str>,
+        at: &'a str,
+        value: f64,
+    ) -> MetricObservationInput<'a> {
+        MetricObservationInput {
+            id,
+            provider_snapshot_id: None,
+            provider_id: "codex",
+            account_id: account,
+            metric_id: "usage_pct",
+            value_numeric: Some(value),
+            value_text: None,
+            unit: Some("percent"),
+            status: "ok",
+            fidelity: Some("exact"),
+            source_id: Some("cli"),
+            observed_at: at,
+            fetched_at: at,
+        }
+    }
+
+    #[tokio::test]
+    async fn v2_snapshot_and_observation_reinsert_collapses() {
+        let s = migrated().await;
+        let at = "2026-09-14T10:00:00+00:00";
+        assert!(
+            s.insert_provider_snapshot(snapshot("snap-1", None, at))
+                .await
+                .unwrap()
+                .inserted
+        );
+        assert!(
+            !s
+                .insert_provider_snapshot(snapshot("snap-1", None, at))
+                .await
+                .unwrap()
+                .inserted
+        );
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_snapshots")
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+        assert!(
+            s.insert_metric_observation(&observation("obs-1", None, at, 42.0))
+                .await
+                .unwrap()
+                .inserted
+        );
+        assert!(
+            !s.insert_metric_observation(&observation("obs-1", None, at, 42.0))
+                .await
+                .unwrap()
+                .inserted
+        );
+        let m: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM metric_observations")
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+        assert_eq!(m, 1);
+    }
+
+    #[tokio::test]
+    async fn v2_source_backoff_round_trips() {
+        let s = migrated().await;
+        let now = "2026-09-14T10:00:00+00:00";
+        let backoff = "2026-09-14T10:05:00+00:00";
+        s.record_source_attempt("codex", "cli", false, Some("rate_limit"), Some(backoff), now)
+            .await
+            .unwrap();
+        assert_eq!(
+            s.source_backoff_until("codex", "cli").await.unwrap().as_deref(),
+            Some(backoff)
+        );
+        // Success clears the backoff; last_success_at is set.
+        let later = "2026-09-14T10:06:00+00:00";
+        s.record_source_attempt("codex", "cli", true, None, None, later)
+            .await
+            .unwrap();
+        assert_eq!(s.source_backoff_until("codex", "cli").await.unwrap(), None);
+        let last: Option<String> = sqlx::query_scalar(
+            "SELECT last_success_at FROM provider_sources WHERE provider_id = 'codex' AND source_id = 'cli'",
+        )
+        .fetch_one(s.pool())
+        .await
+        .unwrap();
+        assert_eq!(last.as_deref(), Some(later));
+    }
+
+    #[tokio::test]
+    async fn v2_history_excludes_out_of_range_and_orders_ascending() {
+        let s = migrated().await;
+        s.insert_metric_observation(&observation("o-early", None, "2026-09-14T08:00:00+00:00", 1.0))
+            .await
+            .unwrap();
+        s.insert_metric_observation(&observation("o-mid", None, "2026-09-14T09:00:00+00:00", 2.0))
+            .await
+            .unwrap();
+        s.insert_metric_observation(&observation("o-late", None, "2026-09-14T11:00:00+00:00", 3.0))
+            .await
+            .unwrap();
+        let rows = s
+            .observation_history(
+                "codex",
+                "usage_pct",
+                None,
+                "2026-09-14T08:30:00+00:00",
+                "2026-09-14T10:00:00+00:00",
+            )
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "o-mid");
+        // Full range returns ascending order.
+        let all = s
+            .observation_history(
+                "codex",
+                "usage_pct",
+                None,
+                "2026-09-14T00:00:00+00:00",
+                "2026-09-15T00:00:00+00:00",
+            )
+            .await
+            .unwrap();
+        let ids: Vec<&str> = all.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, vec!["o-early", "o-mid", "o-late"]);
+    }
+
+    #[tokio::test]
+    async fn v2_two_accounts_coexist_without_overwrite() {
+        let s = migrated().await;
+        s.insert_provider_snapshot(snapshot("snap-a", Some("a"), "2026-09-14T09:00:00+00:00"))
+            .await
+            .unwrap();
+        s.insert_provider_snapshot(snapshot("snap-b", Some("b"), "2026-09-14T09:30:00+00:00"))
+            .await
+            .unwrap();
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_snapshots")
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+        assert_eq!(n, 2);
+        let a = s.latest_snapshot("codex", Some("a")).await.unwrap().unwrap();
+        let b = s.latest_snapshot("codex", Some("b")).await.unwrap().unwrap();
+        assert_eq!(a.id, "snap-a");
+        assert_eq!(b.id, "snap-b");
+    }
+
+    #[tokio::test]
+    async fn v2_null_account_snapshot_does_not_match_named_query() {
+        let s = migrated().await;
+        s.insert_provider_snapshot(snapshot("snap-null", None, "2026-09-14T09:00:00+00:00"))
+            .await
+            .unwrap();
+        assert!(s.latest_snapshot("codex", Some("a")).await.unwrap().is_none());
+        assert!(s.latest_snapshot("codex", None).await.unwrap().is_some());
     }
 }
