@@ -84,3 +84,88 @@ export function formatRelativeTime(iso: string | null): string {
   if (ageS < 3600) return `${Math.floor(ageS / 60)}m ago`;
   return `${Math.floor(ageS / 3600)}h ago`;
 }
+
+// ---- V2 canonical source contract (mirror of `source.rs`) ------------------
+
+export type SourceFidelity =
+  | 'official_public' | 'official_session' | 'first_party_local' | 'derived' | 'manual';
+export type ObservationStatus =
+  | 'live' | 'stale' | 'derived'
+  | 'needs_auth' | 'rate_limited' | 'unavailable' | 'unsupported' | 'error' | 'disabled' | 'demo';
+export type SourceKind =
+  | 'api' | 'cli' | 'local_db' | 'local_cache' | 'local_log' | 'runtime_api' | 'language_server' | 'manual';
+
+export interface SourceDescriptor {
+  source_id: string;
+  provider_id: string;
+  kind: SourceKind;
+  fidelity: SourceFidelity;
+  label: string;
+  requires_local_access: boolean;
+}
+
+export interface UsageWindow {
+  id: string;
+  label: string;
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  used_fraction: number | null;
+  starts_at: string | null;
+  resets_at: string | null;
+  duration_minutes: number | null;
+  source_metric_id: string;
+}
+
+export interface ProviderSnapshotDisplay {
+  provider_id: string;
+  account_key: string | null;
+  account_label: string | null;
+  collected_at: string;
+  last_successful_at: string | null;
+  headline_metric_id: string | null;
+  capabilities: string[];
+  active_source_id: string | null;
+  windows: UsageWindow[];
+  activity_state: string | null;
+  activity_observed_at: string | null;
+  activity_source_id: string | null;
+  health_state: ObservationStatus;
+  health_message: string | null;
+  retry_at: string | null;
+}
+
+/** True only for statuses that may back a user-visible number. */
+export function isUserVisibleValue(s: ObservationStatus): boolean {
+  return s === 'live' || s === 'stale' || s === 'derived';
+}
+
+/** Prefer the provider fraction; else used/limit. Never guesses or divides by zero/unknown. */
+export function honestFraction(
+  used: number | null | undefined,
+  limit: number | null | undefined,
+  authoritative: number | null | undefined,
+): number | null {
+  if (typeof authoritative === 'number') {
+    if (Number.isFinite(authoritative) && authoritative >= 0 && authoritative <= 1) {
+      return authoritative;
+    }
+    return null;
+  }
+  if (
+    typeof used === 'number' && typeof limit === 'number' &&
+    Number.isFinite(used) && Number.isFinite(limit) && limit > 0 && used >= 0
+  ) {
+    return used / limit;
+  }
+  return null;
+}
+
+/** Find the headline window by metric id. Never falls back to windows[0]. */
+export function resolveHeadline(
+  windows: UsageWindow[],
+  headlineMetricId: string | null | undefined,
+): UsageWindow | null {
+  if (!headlineMetricId) return null;
+  return windows.find((w) => w.source_metric_id === headlineMetricId) ?? null;
+}

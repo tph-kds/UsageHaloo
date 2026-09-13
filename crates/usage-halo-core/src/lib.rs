@@ -5,6 +5,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 pub mod contracts;
+pub mod source;
 pub mod time;
 
 pub type Result<T> = std::result::Result<T, ConnectorError>;
