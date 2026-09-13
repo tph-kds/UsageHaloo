@@ -8,7 +8,8 @@
   import Logo from './lib/components/Logo.svelte';
   import WelcomeEmpty from './lib/components/WelcomeEmpty.svelte';
   import TrendChart from './lib/components/TrendChart.svelte';
-  import { fetchSnapshot, USE_LIVE } from './lib/api';
+  import { getRepository, resolveAppDataMode } from './lib/dataMode';
+  import { USE_LIVE } from './lib/api';
   import { PROVIDER_CATALOG, catalogById } from './lib/catalog';
   import { alertStore, billingLine, budgetStore, connectionStore, costDisplay, healthLabel, resolveStage } from './lib/lifecycle';
   import { rangeForPreset } from './lib/range';
@@ -22,6 +23,7 @@
   let lastError = $state<string | null>(null);
   let lastSuccessAt = $state<string | null>(null);
   let generatedAt = $state<string | null>(null);
+  const appDataMode = resolveAppDataMode();
 
   let page = $state('overview');
   let theme = $state<'dark' | 'light'>('dark');
@@ -112,7 +114,7 @@
   );
 
   async function refresh() {
-    const snap = await fetchSnapshot();
+    const snap = await getRepository(appDataMode).fetch();
     if (snap.source === 'error') { lastError = snap.error ?? 'refresh failed'; return; }
     rawProviders = snap.providers;
     models = snap.models ?? [];
