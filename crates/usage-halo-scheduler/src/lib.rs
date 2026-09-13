@@ -132,6 +132,56 @@ pub fn age_seconds(since: DateTime<Utc>, now: DateTime<Utc>) -> u64 {
     now.signed_duration_since(since).num_seconds().max(0) as u64
 }
 
+/// V2 data-class cadence (brief section 7 starting defaults, not provider
+/// promises). Quota polling splits by engagement; live classes poll fast.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataClass {
+    QuotaActive,
+    QuotaIdle,
+    QuotaBackground,
+    Activity,
+    Runtime,
+    Billing,
+}
+
+pub fn data_class_interval_secs(class: DataClass) -> u64 {
+    match class {
+        DataClass::QuotaActive => 60,
+        DataClass::QuotaIdle => 300,
+        DataClass::QuotaBackground => 600,
+        DataClass::Activity => 2,
+        DataClass::Runtime => 5,
+        DataClass::Billing => 900,
+    }
+}
+
+/// Persisted 429 backoff ladder: 30, 60, 120, 300, then 900 capped.
+pub fn backoff_ladder_secs(consecutive_failures: u32) -> i64 {
+    match consecutive_failures {
+        0 => 30,
+        1 => 60,
+        2 => 120,
+        3 => 300,
+        _ => 900,
+    }
+}
+
+/// Deterministic jitter in [base, base + base/4] from a salt via integer
+/// hash (no RNG, stable for tests).
+pub fn backoff_with_jitter_secs(base_secs: i64, salt: u64) -> i64 {
+    if base_secs <= 0 {
+        return base_secs;
+    }
+    let mut h = salt.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    h ^= h >> 30;
+    h = h.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    h ^= h >> 27;
+    h = h.wrapping_mul(0x94d0_49bb_1331_11eb);
+    h ^= h >> 31;
+    let quarter = base_secs / 4;
+    base_secs.saturating_add((h % (quarter as u64 + 1)) as i64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,5 +219,42 @@ mod tests {
     #[test]
     fn unknown_age_is_unknown_not_zero() {
         assert_eq!(freshness_state("codex", None), FreshnessState::Unknown);
+    }
+
+    #[test]
+    fn backoff_ladder_values_and_cap() {
+        assert_eq!(backoff_ladder_secs(0), 30);
+        assert_eq!(backoff_ladder_secs(1), 60);
+        assert_eq!(backoff_ladder_secs(2), 120);
+        assert_eq!(backoff_ladder_secs(3), 300);
+        assert_eq!(backoff_ladder_secs(4), 900);
+        assert_eq!(backoff_ladder_secs(5), 900);
+        assert_eq!(backoff_ladder_secs(99), 900);
+    }
+
+    #[test]
+    fn jitter_within_bounds_and_deterministic() {
+        for base in [30i64, 60, 120, 300, 900] {
+            let quarter = base / 4;
+            for salt in [0u64, 1, 7, 12345, u64::MAX] {
+                let j = backoff_with_jitter_secs(base, salt);
+                assert!(j >= base && j <= base + quarter, "{base} {salt} -> {j}");
+                assert_eq!(j, backoff_with_jitter_secs(base, salt));
+            }
+        }
+    }
+
+    #[test]
+    fn quota_cadence_ordering() {
+        let active = data_class_interval_secs(DataClass::QuotaActive);
+        let idle = data_class_interval_secs(DataClass::QuotaIdle);
+        let background = data_class_interval_secs(DataClass::QuotaBackground);
+        let activity = data_class_interval_secs(DataClass::Activity);
+        let runtime = data_class_interval_secs(DataClass::Runtime);
+        let billing = data_class_interval_secs(DataClass::Billing);
+        assert_eq!((active, idle, background, activity, runtime, billing), (60, 300, 600, 2, 5, 900));
+        assert!(active < idle && idle <= background);
+        assert!(activity < active && runtime < active);
+        assert!(billing >= background && billing > active);
     }
 }
