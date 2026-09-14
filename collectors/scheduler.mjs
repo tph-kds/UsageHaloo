@@ -15,6 +15,15 @@ export const CONNECTOR_SCHEDULE = {
   'github-copilot': { mode: 'poll', nominal_seconds: 86400, max_healthy_age_seconds: 2 * 86400, note: 'daily/aggregated reports, never live' },
   'mistral': { mode: 'poll', nominal_seconds: 3600, max_healthy_age_seconds: 2 * 3600, note: 'admin API for eligible plans' },
   'perplexity': { mode: 'event', nominal_seconds: null, max_healthy_age_seconds: 86400, note: 'instrumented responses only' },
+  // Instrumented-response class (Phase D unit 0): generic-response providers
+  // share perplexity's event semantics — observed only when traffic flows,
+  // stale after 24h without any. Presence of a row never means live.
+  'xai': { mode: 'event', nominal_seconds: null, max_healthy_age_seconds: 86400, note: 'instrumented responses only' },
+  'deepseek': { mode: 'event', nominal_seconds: null, max_healthy_age_seconds: 86400, note: 'instrumented responses only' },
+  'groq': { mode: 'event', nominal_seconds: null, max_healthy_age_seconds: 86400, note: 'instrumented responses only' },
+  'together': { mode: 'event', nominal_seconds: null, max_healthy_age_seconds: 86400, note: 'instrumented responses only' },
+  'fireworks': { mode: 'event', nominal_seconds: null, max_healthy_age_seconds: 86400, note: 'instrumented responses only' },
+  'cerebras': { mode: 'event', nominal_seconds: null, max_healthy_age_seconds: 86400, note: 'instrumented responses only' },
   'ollama': { mode: 'poll', nominal_seconds: 60, max_healthy_age_seconds: 300, note: 'localhost, cheap' },
   'lm-studio': { mode: 'poll', nominal_seconds: 60, max_healthy_age_seconds: 300, note: 'localhost, cheap' },
 };
@@ -30,6 +39,19 @@ export function freshnessState(connectorId, ageSeconds) {
   if (ageSeconds <= (meta.nominal_seconds ?? 300)) return liveCap;
   if (ageSeconds <= meta.max_healthy_age_seconds) return 'fresh';
   return 'stale';
+}
+// Binary live/stale gate for instrumented_store overlays (Phase D unit 0,
+// same policy as the codex overlay in prototype/server.mjs): a stored row's
+// presence never means live — only a recent observation is live, everything
+// else keeps its values as last-known-good with a stale (or unknown, for
+// missing/future timestamps and unlisted keys) freshness. Never live unless
+// freshnessState says 'live'.
+export function instrumentedOverlayState(scheduleKey, ageMs) {
+  const ageS = Number.isFinite(ageMs) && ageMs >= 0 ? Math.round(ageMs / 1000) : null;
+  const state = freshnessState(scheduleKey, ageS);
+  if (state === 'live') return { live: true, freshness: 'live' };
+  if (state === 'unknown') return { live: false, freshness: 'unknown' };
+  return { live: false, freshness: 'stale' };
 }
 /** Local calendar date (YYYY-MM-DD) of an instant in an IANA timezone.
  *  Throws a RangeError for unknown zones — callers must not silently fall

@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { detectProviders, readOllama, readLMStudio, readClaudeSpool, readOpenRouterCredits } from '../collectors/local.mjs';
 import { readEvents } from '../collectors/store.mjs';
 import { reconcileEvents } from '../collectors/reconcile.mjs';
-import { buildRollups, CONNECTOR_SCHEDULE, freshnessState, localDate } from '../collectors/scheduler.mjs';
+import { buildRollups, CONNECTOR_SCHEDULE, freshnessState, instrumentedOverlayState, localDate } from '../collectors/scheduler.mjs';
 import { forecastQuota, forecastSpend } from '../collectors/forecast.mjs';
 import { evaluateAll, DEFAULT_RULES } from '../collectors/alerts.mjs';
 import { readCodexRateLimits } from '../collectors/codex-app-server.mjs';
@@ -784,11 +784,17 @@ async function snapshotWithLive(url) {
           if (Number.isFinite(ageMs) && ageMs >= 0) p.age_seconds = Math.round(ageMs / 1000);
         }
         if (agg.n > 0 && !p.live) {
-          p.live = true;
+          // Honesty gate (Phase D unit 0): row presence never means live. The
+          // latest instrumented observation is age-gated through the connector
+          // schedule — live only while recent, else stale/unknown with values
+          // retained as last-known-good (same binary policy as the codex overlay).
+          const ageMs = agg.latest ? Date.now() - new Date(agg.latest).getTime() : NaN;
+          const gate = instrumentedOverlayState(p.id, ageMs);
+          p.live = gate.live;
           p.source = p.source && p.source !== p.sourceMode ? p.source : 'instrumented_store';
-          p.freshness = 'fresh';
-          p.health = 'healthy';
-          p.provenance = { source: p.source, scope: p.scope, freshness: 'fresh', authority: 'instrumented_response', sample: false };
+          p.freshness = gate.freshness;
+          p.health = gate.live ? 'healthy' : gate.freshness;
+          p.provenance = { source: p.source, scope: p.scope, freshness: gate.freshness, authority: 'instrumented_response', sample: false };
         }
       }
       if (models.length && base.models.length === 0) base.models = models;

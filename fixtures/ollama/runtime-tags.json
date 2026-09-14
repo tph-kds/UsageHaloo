@@ -1,0 +1,8 @@
+{
+  "_note": "shape contract, values illustrative — Ollama GET /api/tags lists installed models; not yet polled by any reader, contract covers the models[].name subset shared with /api/ps (see collectors/local.mjs readOllama)",
+  "models": [
+    {
+      "name": "llama3.1:8b"
+    }
+  ]
+}

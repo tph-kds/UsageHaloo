@@ -1,0 +1,8 @@
+{
+  "_note": "shape contract, values illustrative — Ollama GET /api/ps lists currently loaded models; the runtime reader (collectors/local.mjs readOllama) parses only models[].name",
+  "models": [
+    {
+      "name": "llama3.1:8b"
+    }
+  ]
+}
