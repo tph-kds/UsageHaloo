@@ -1,16 +1,9 @@
 <script lang="ts">
-  import { PRESETS, rangeLabel } from '../range';
+  import { PRESETS, rangeForPreset, rangeLabel } from '../range';
   import type { DateRange } from '../types';
   let { range, onChange } = $props<{ range: DateRange; onChange: (r: DateRange) => void }>();
   function pick(preset: (typeof PRESETS)[number]['id']) {
-    const now = new Date();
-    const start = new Date(now);
-    if (preset === 'today') start.setHours(0, 0, 0, 0);
-    else if (preset === 'last7' || preset === 'custom') start.setDate(start.getDate() - 7);
-    else if (preset === 'week') { const dow = (start.getDay() + 6) % 7; start.setDate(start.getDate() - dow); start.setHours(0, 0, 0, 0); }
-    else if (preset === 'last30') start.setDate(start.getDate() - 30);
-    else if (preset === 'month' || preset === 'billing') { start.setDate(1); start.setHours(0, 0, 0, 0); }
-    onChange({ start: start.toISOString(), end: now.toISOString(), timezone: range.timezone, preset });
+    onChange(rangeForPreset(preset, range.timezone));
   }
 </script>
 

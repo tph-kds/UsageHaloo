@@ -517,8 +517,9 @@ async function fetchBuckets() {
   const days = RANGES[STATE.range] || 7;
   const to = new Date().toISOString();
   const from = new Date(Date.now() - days * 86400_000).toISOString();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   try {
-    const r = await fetch(`/api/activity-buckets?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&metric=${STATE.metric}`, { cache: 'no-store' });
+    const r = await fetch(`/api/activity-buckets?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&metric=${STATE.metric}&timezone=${encodeURIComponent(tz)}`, { cache: 'no-store' });
     if (!r.ok) throw 0;
     const j = await r.json();
     STATE.buckets = j.buckets || [];

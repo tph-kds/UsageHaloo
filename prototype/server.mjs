@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { detectProviders, readOllama, readLMStudio, readClaudeSpool, readOpenRouterCredits } from '../collectors/local.mjs';
 import { readEvents } from '../collectors/store.mjs';
 import { reconcileEvents } from '../collectors/reconcile.mjs';
-import { buildRollups, CONNECTOR_SCHEDULE, freshnessState } from '../collectors/scheduler.mjs';
+import { buildRollups, CONNECTOR_SCHEDULE, freshnessState, localDate } from '../collectors/scheduler.mjs';
 import { forecastQuota, forecastSpend } from '../collectors/forecast.mjs';
 import { evaluateAll, DEFAULT_RULES } from '../collectors/alerts.mjs';
 import { readCodexRateLimits } from '../collectors/codex-app-server.mjs';
@@ -897,10 +897,11 @@ async function snapshotWithLive(url) {
 }
 
 // Real activity buckets from the immutable store (powers the showcase
-// heatmap + trend). Query: ?from=ISO&to=ISO&metric=tokens|cost|requests.
-// Buckets are UTC calendar days; empty store → empty buckets, never a
-// generated pattern.
-function activityBuckets(fromIso, toIso, metric = 'tokens') {
+// heatmap + trend). Query: ?from=ISO&to=ISO&metric=tokens|cost|requests&timezone=IANA.
+// Buckets are LOCAL calendar days in `timezone` (UTC instants persist; the
+// zone's midnights convert back to UTC for grouping — never UTC slicing).
+// Empty store → empty buckets, never a generated pattern.
+function activityBuckets(fromIso, toIso, metric = 'tokens', timezone = 'UTC') {
   let events = [];
   try { events = reconcileEvents(readEvents(5000)); } catch { events = []; }
   const from = new Date(fromIso).getTime();
@@ -908,23 +909,38 @@ function activityBuckets(fromIso, toIso, metric = 'tokens') {
   if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
     return { buckets: [], metric, error: 'invalid_range' };
   }
-  const days = Math.min(62, Math.max(1, Math.ceil((to - from) / 86400_000)));
-  const sums = new Array(days).fill(0);
+  const tz = timezone || 'UTC';
+  try { localDate(tz, new Date(from).toISOString()); }
+  catch { return { buckets: [], metric, error: 'unknown_timezone' }; }
+  const sums = new Map();
   for (const e of events) {
     const t = new Date(e.observed_at).getTime();
     if (!Number.isFinite(t) || t < from || t >= to) continue;
-    const i = Math.min(days - 1, Math.floor((t - from) / 86400_000));
-    if (metric === 'cost') sums[i] += Number(e.provider_cost) || 0;
-    else if (metric === 'requests') sums[i] += Number(e.requests) || 0;
-    else sums[i] += (Number(e.input_tokens) || 0) + (Number(e.output_tokens) || 0);
+    const day = localDate(tz, e.observed_at);
+    let add = 0;
+    if (metric === 'cost') add = Number(e.provider_cost) || 0;
+    else if (metric === 'requests') add = Number(e.requests) || 0;
+    else add = (Number(e.input_tokens) || 0) + (Number(e.output_tokens) || 0);
+    sums.set(day, (sums.get(day) || 0) + add);
   }
-  const max = Math.max(1, ...sums);
+  // One bucket per local calendar day intersecting [from, to). 12h steps
+  // always land on every local day, including 23h DST days.
+  const days = [];
+  const seen = new Set();
+  for (let cursor = from, i = 0; i < 130 && cursor < to && days.length < 62; i++) {
+    const d = localDate(tz, new Date(cursor).toISOString());
+    if (!seen.has(d)) { seen.add(d); days.push(d); }
+    cursor += 12 * 3600_000;
+  }
+  const values = days.map((d) => sums.get(d) || 0);
+  const max = Math.max(1, ...values);
   return {
     metric,
-    buckets: sums.map((v, i) => ({
-      day: new Date(from + i * 86400_000).toISOString().slice(0, 10),
-      value: v,
-      level: v <= 0 ? 0 : v / max > 0.75 ? 4 : v / max > 0.5 ? 3 : v / max > 0.25 ? 2 : 1,
+    timezone: tz,
+    buckets: days.map((day, i) => ({
+      day,
+      value: values[i],
+      level: values[i] <= 0 ? 0 : values[i] / max > 0.75 ? 4 : values[i] / max > 0.5 ? 3 : values[i] / max > 0.25 ? 2 : 1,
     })),
   };
 }
@@ -1021,7 +1037,7 @@ const server = http.createServer(async (req, res) => {
     const now = Date.now();
     const to = url.searchParams.get('to') || new Date(now).toISOString();
     const from = url.searchParams.get('from') || new Date(now - 28 * 86400_000).toISOString();
-    return json(res, 200, { generated_at: new Date().toISOString(), ...activityBuckets(from, to, url.searchParams.get('metric') || 'tokens') });
+    return json(res, 200, { generated_at: new Date().toISOString(), ...activityBuckets(from, to, url.searchParams.get('metric') || 'tokens', url.searchParams.get('timezone') || 'UTC') });
   }
   if (req.method === 'GET' && url.pathname === '/api/quotas') {
     // Latest quota window per limit_id for one provider (or all when
@@ -1139,10 +1155,14 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.method === 'GET' && url.pathname === '/api/rollups') {
+    const tz = url.searchParams.get('timezone') || 'UTC';
     try {
       const events = reconcileEvents(readEvents(5000));
-      return json(res, 200, { rollups: buildRollups(events), count: events.length, reconciled: true });
-    } catch { return json(res, 500, { error: 'rollup_failed' }); }
+      return json(res, 200, { rollups: buildRollups(events, tz), timezone: tz, count: events.length, reconciled: true });
+    } catch (e) {
+      if (e instanceof RangeError) return json(res, 400, { error: 'unknown_timezone' });
+      return json(res, 500, { error: 'rollup_failed' });
+    }
   }
   if (req.method === 'GET' && url.pathname === '/api/forecast') {
     const demoMode = isDemoRequest(url);

@@ -14,7 +14,11 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export function storeDir() { return path.join(os.homedir(), '.usagehalo', 'store'); }
+export function storeDir() {
+  const override = process.env.USAGEHALO_STORE_DIR;
+  if (override && override.trim()) return override;
+  return path.join(os.homedir(), '.usagehalo', 'store');
+}
 export function ensureStore() {
   const d = storeDir();
   fs.mkdirSync(d, { recursive: true, mode: 0o700 });
