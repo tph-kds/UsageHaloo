@@ -1,6 +1,8 @@
 <script lang="ts">
   import Logo from './Logo.svelte';
   import { billingLine, costDisplay, healthLabel, planDisplay } from '../lifecycle';
+  import { catalogById } from '../catalog';
+  import { formatRelativeTime, honestFraction, isUserVisibleValue, resolveHeadline } from '../contracts';
   import type { ProviderConnection, ProviderView } from '../types';
 
   // Centered, viewport-relative detail dialog (rendered at app root, never
@@ -24,6 +26,27 @@
 
   const connected = $derived(!!connection);
   const ownModels = $derived(models.filter((m: ModelRow) => m.surface === provider.displayName || m.billing_owner === provider.id));
+  // No new props: snapshot already flows via merged ProviderView (App.svelte
+  // spread keeps api.ts `snapshot` passthrough intact).
+  const snap = $derived(provider.snapshot ?? provider.v2 ?? null);
+  const capabilities = $derived([...new Set((catalogById(provider.id)?.methods ?? []).flatMap((m) => m.capabilities))]);
+  const account = $derived(snap?.account_label ?? snap?.account_key ?? connection?.display_name ?? null);
+  const headlineWindow = $derived(snap ? resolveHeadline(snap.windows, snap.headline_metric_id) : null);
+  const observedIso = $derived(snap?.observed_at ?? snap?.collected_at ?? null);
+  // One honest sentence from present fields only; non-visible health shows the reason instead.
+  const whyLine = $derived.by(() => {
+    if (!snap) return null;
+    if (!isUserVisibleValue(snap.health_state)) return snap.health_message ?? `Source reports ${snap.health_state}.`;
+    const bits: string[] = [];
+    if (headlineWindow) {
+      const f = honestFraction(headlineWindow.used, headlineWindow.limit, headlineWindow.used_fraction);
+      bits.push(f != null ? `${headlineWindow.label} ${Math.round(f * 100)}%` : headlineWindow.label);
+    }
+    if (snap.active_source_id) bits.push(`from ${snap.active_source_id}`);
+    if (observedIso) bits.push(`observed ${formatRelativeTime(observedIso)}`);
+    if (!bits.length) return null;
+    return bits.join(' ') + (account ? ` · ${account}` : '');
+  });
 </script>
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape') onClose(); }} />
@@ -76,6 +99,24 @@
         {/if}
         <p class="muted">Prompts and responses are never collected.</p>
       </section>
+      {#if snap}
+        <section>
+          <h3>Provider settings and diagnostics</h3>
+          {#if account}<div class="kv"><span>Account</span><span>{account}</span></div>{/if}
+          {#if capabilities.length}<div class="kv"><span>Capabilities</span><span>{capabilities.join(', ')}</span></div>{/if}
+          {#if snap.active_source_id}<div class="kv"><span>Current source</span><span>{snap.active_source_id}</span></div>{/if}
+          {#if snap.headline_metric_id}<div class="kv"><span>Headline metric</span><span>{snap.headline_metric_id}{headlineWindow ? ` · ${headlineWindow.label}` : ''}</span></div>{/if}
+          {#if observedIso}<div class="kv"><span>Observed</span><span>{formatRelativeTime(observedIso)}</span></div>{/if}
+          <div class="kv"><span>Health</span><span>{snap.health_state}{snap.health_message ? ` · ${snap.health_message}` : ''}</span></div>
+          {#if snap.windows.length}
+            {#each snap.windows as w}
+              {@const f = honestFraction(w.used, w.limit, w.used_fraction)}
+              <div class="kv"><span>{w.label}<small>{w.resets_at ? `Resets ${w.resets_at}` : ''}</small></span><strong>{f != null ? `${Math.round(f * 100)}%` : '—'}</strong></div>
+            {/each}
+          {/if}
+          {#if whyLine}<p class="muted">{whyLine}</p>{/if}
+        </section>
+      {/if}
     </div>
 
     <footer>
