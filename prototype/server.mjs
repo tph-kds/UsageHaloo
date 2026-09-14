@@ -631,6 +631,28 @@ async function codexV2Snapshot(nowMs = Date.now()) {
   } catch { return base('unavailable', [], null); }
 }
 
+// Mirror of connectors/cursor/src/lib.rs CursorAdapter (Phase B3): local
+// state carries identity only, so the display snapshot is Unsupported with
+// zero windows. Installed presence is asserted by file existence; token
+// material is never read here (sqlite stays in the Rust adapter).
+function cursorV2Snapshot(nowMs = Date.now()) {
+  const collected_at = new Date(nowMs).toISOString();
+  const base = (health_state, active_source_id) => ({
+    health_state, account_key: null, headline_metric_id: null,
+    active_source_id, collected_at, observed_at: null, windows: [],
+  });
+  try {
+    const appdata = process.env.APPDATA;
+    const db = appdata ? path.join(appdata, 'Cursor', 'User', 'globalStorage', 'state.vscdb') : null;
+    if (db) {
+      try {
+        if (fs.existsSync(db)) return base('unsupported', 'local-state');
+      } catch { /* fall through to unavailable */ }
+    }
+    return base('unavailable', null);
+  } catch { return base('unavailable', null); }
+}
+
 async function snapshotWithLive(url) {
   const base = snapshotLive(url);
   const demoMode = base.demo_mode === true;
@@ -817,6 +839,11 @@ async function snapshotWithLive(url) {
   try {
     const e = base.providers.find((p) => p.id === 'codex');
     if (e) e.v2 = await codexV2Snapshot();
+  } catch { /* v2 overlay is best-effort; base snapshot stands */ }
+  // Additive V2 display snapshot for the Cursor card (Phase B3).
+  try {
+    const e = base.providers.find((p) => p.id === 'cursor');
+    if (e) e.v2 = cursorV2Snapshot();
   } catch { /* v2 overlay is best-effort; base snapshot stands */ }
   base.detected = detected;
   base.live = live;
