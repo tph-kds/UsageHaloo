@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { detectProviders, readOllama, readLMStudio, readClaudeSpool, readOpenRouterCredits } from '../collectors/local.mjs';
 import { readEvents } from '../collectors/store.mjs';
 import { reconcileEvents } from '../collectors/reconcile.mjs';
-import { buildRollups, CONNECTOR_SCHEDULE } from '../collectors/scheduler.mjs';
+import { buildRollups, CONNECTOR_SCHEDULE, freshnessState } from '../collectors/scheduler.mjs';
 import { forecastQuota, forecastSpend } from '../collectors/forecast.mjs';
 import { evaluateAll, DEFAULT_RULES } from '../collectors/alerts.mjs';
 import { readCodexRateLimits } from '../collectors/codex-app-server.mjs';
@@ -564,6 +564,73 @@ function claudeV2Snapshot(nowMs = Date.now()) {
   } catch { return base('unavailable', [], null); }
 }
 
+// Codex V2 display snapshot (Phase B2 unit 2). Mirrors the Claude V2 shape
+// above: live-first windows from a cached app-server read, else the same
+// persisted rows the quota pipeline used — observed_at always from the data.
+const CODEX_V2_TTL_MS = 60 * 1000;
+const CODEX_V2_LIVE_TIMEOUT_MS = 3000;
+let codexV2Cache = { at: 0, quotas: null, observed_at: null };
+
+function codexV2ResetsIso(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') { const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d.toISOString(); }
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const d = new Date(n * 1000);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function codexV2Windows(quotas) {
+  return (quotas || [])
+    .filter((q) => q && typeof q.used_percent === 'number' && Number.isFinite(q.used_percent))
+    .map((q) => ({
+      id: String(q.limit_id),
+      label: q.label || String(q.limit_id),
+      used_fraction: Math.max(0, Math.min(1, q.used_percent / 100)),
+      resets_at: codexV2ResetsIso(q.resets_at),
+      source_metric_id: String(q.limit_id),
+    }));
+}
+
+async function codexV2Snapshot(nowMs = Date.now()) {
+  const collected_at = new Date(nowMs).toISOString();
+  const base = (health_state, windows, active_source_id, observed_at = null) => ({
+    health_state, account_key: null, headline_metric_id: 'primary',
+    active_source_id, collected_at, observed_at, windows,
+  });
+  let quotas = null, observed_at = null, active = null;
+  try {
+    if (nowMs - codexV2Cache.at < CODEX_V2_TTL_MS && codexV2Cache.quotas) {
+      ({ quotas, observed_at } = codexV2Cache);
+      active = 'app-server-live';
+    } else {
+      const r = await readCodexRateLimits(CODEX_V2_LIVE_TIMEOUT_MS);
+      if (r.live && (r.quotas || []).length) {
+        quotas = r.quotas; active = 'app-server-live';
+        observed_at = quotas.map((q) => q.observed_at).filter(Boolean).sort().at(-1) || collected_at;
+        codexV2Cache = { at: nowMs, quotas, observed_at };
+      }
+    }
+  } catch { quotas = null; }
+  if ((quotas || []).length) return base('live', codexV2Windows(quotas), active, observed_at);
+  try {
+    const rows = readQuotaSnapshots().filter((q) => q && q.provider === 'codex' && typeof q.used_percent === 'number');
+    if (!rows.length) return base('unavailable', [], 'quota-snapshot');
+    const newest = rows.map((q) => String(q.observed_at)).sort().at(-1);
+    const ageMs = Date.now() - new Date(newest).getTime();
+    const ageS = Number.isFinite(ageMs) && ageMs >= 0 ? Math.round(ageMs / 1000) : null;
+    const liveNow = freshnessState('codex', ageS) === 'live';
+    const latest = new Map();
+    for (const q of rows) {
+      const cur = latest.get(q.limit_id);
+      if (!cur || String(q.observed_at) > String(cur.observed_at)) latest.set(q.limit_id, q);
+    }
+    const wins = codexV2Windows([...latest.values()]);
+    if (!wins.length) return base('unavailable', [], 'quota-snapshot', newest || null);
+    return base(liveNow ? 'live' : 'stale', wins, 'quota-snapshot', newest || null);
+  } catch { return base('unavailable', [], null); }
+}
+
 async function snapshotWithLive(url) {
   const base = snapshotLive(url);
   const demoMode = base.demo_mode === true;
@@ -678,8 +745,14 @@ async function snapshotWithLive(url) {
     try {
       const quotas = readQuotaSnapshots();
       const latestByProvider = new Map();
+      const latestCodexByLimit = new Map();
       for (const q of quotas) {
         if (q == null || !q.provider) continue;
+        if (q.provider === 'codex' && q.limit_id) {
+          const cur = latestCodexByLimit.get(q.limit_id);
+          if (!cur || String(q.observed_at) > String(cur.observed_at)) latestCodexByLimit.set(q.limit_id, q);
+          continue;
+        }
         const cur = latestByProvider.get(q.provider);
         if (!cur || String(q.observed_at) > String(cur.observed_at)) latestByProvider.set(q.provider, q);
       }
@@ -693,12 +766,57 @@ async function snapshotWithLive(url) {
         e.live = true;
         e.provenance = { source: e.source, scope: q.scope || 'account', freshness: e.freshness, authority: 'provider_telemetry', sample: false };
       }
+      // Codex honesty: one row per provider collapses the primary window
+      // into the secondary row's percent (the later observed_at wins), so
+      // codex rows are tracked per limit_id and age-gated per the connector
+      // schedule — live only while recent, else stale with values retained,
+      // unavailable when no rows exist at all.
+      try {
+        const e = base.providers.find((p) => p.id === 'codex');
+        if (e) {
+          const rows = [...latestCodexByLimit.values()].filter((q) => typeof q.used_percent === 'number');
+          if (!latestCodexByLimit.size) {
+            // No codex rows at all: quota provenance is unknown, so quota is
+            // unavailable — without clearing a live state earned elsewhere.
+            if (!e.live) {
+              e.health = 'unavailable'; e.freshness = 'unknown';
+              e.provenance = { source: e.source, scope: e.scope, freshness: 'unknown', authority: 'provider_telemetry', sample: false };
+            }
+          } else if (rows.length) {
+            const byLimit = new Map(rows.map((q) => [q.limit_id, q]));
+            const primary = byLimit.get('primary'), secondary = byLimit.get('secondary');
+            const newest = rows.map((q) => String(q.observed_at)).sort().at(-1);
+            const ageMs = Date.now() - new Date(newest).getTime();
+            const ageS = Number.isFinite(ageMs) && ageMs >= 0 ? Math.round(ageMs / 1000) : null;
+            const state = freshnessState('codex', ageS);
+            const liveNow = state === 'live';
+            // Binary honesty policy: live only while recent per the schedule;
+            // otherwise stale with values retained. Freshness follows health
+            // so the two never contradict.
+            const freshness = liveNow ? 'live' : 'stale';
+            if (primary) e.primaryPercent = Math.max(0, Math.min(100, Math.round(primary.used_percent)));
+            if (secondary) e.secondaryPercent = Math.max(0, Math.min(100, Math.round(secondary.used_percent)));
+            e.source = 'quota_snapshot';
+            e.freshness = freshness;
+            e.health = liveNow ? 'healthy' : 'stale';
+            e.live = liveNow;
+            e.observed_at = newest || null;
+            if (ageS != null) e.age_seconds = ageS;
+            e.provenance = { source: 'quota_snapshot', scope: 'account', freshness, authority: 'provider_telemetry', sample: false };
+          }
+        }
+      } catch { /* codex honesty overlay is best-effort */ }
     } catch { /* quota overlay is best-effort */ }
   }
   // Additive V2 display snapshot for the Claude Code card only.
   try {
     const e = base.providers.find((p) => p.id === 'claude-code');
     if (e) e.v2 = claudeV2Snapshot();
+  } catch { /* v2 overlay is best-effort; base snapshot stands */ }
+  // Additive V2 display snapshot for the Codex card (mirrors the Claude V2 attach above).
+  try {
+    const e = base.providers.find((p) => p.id === 'codex');
+    if (e) e.v2 = await codexV2Snapshot();
   } catch { /* v2 overlay is best-effort; base snapshot stands */ }
   base.detected = detected;
   base.live = live;

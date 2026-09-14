@@ -59,7 +59,13 @@ pub fn parse_rate_limits_at(
             output.push(QuotaWindow {
                 provider: "codex".into(),
                 account_id: None,
-                limit_id: format!("{limit_id}:{name}"),
+                // Same scoping as collectors/providers.mjs normalizeCodexRateLimits:
+                // the 'codex' bucket keeps short ids, other limits are scoped.
+                limit_id: if limit_id == "codex" {
+                    name.to_string()
+                } else {
+                    format!("{limit_id}:{name}")
+                },
                 label: label.into(),
                 metric_kind: MetricKind::QuotaPercent,
                 used_value: None,
@@ -709,6 +715,33 @@ mod tests {
         let q = parse_rate_limits(&body);
         assert_eq!(q.len(), 2);
         assert_eq!(q[0].used_percent, Some(28.0));
+        // 'codex' bucket keeps short ids, like normalizeCodexRateLimits.
+        assert_eq!(q[0].limit_id, "primary");
+        assert_eq!(q[1].limit_id, "secondary");
+    }
+
+    #[test]
+    fn non_codex_limit_ids_are_scoped() {
+        let body = json!({
+            "rateLimitsByLimitId": {
+                "codex": {
+                    "primary": {"usedPercent": 0, "windowDurationMins": 300, "resetsAt": 1900000000},
+                    "secondary": {"usedPercent": 31, "windowDurationMins": 10080, "resetsAt": 1900500000}
+                },
+                "base_model_inference": {
+                    "limitId": "base_model_inference",
+                    "limitName": "gpt-reserve",
+                    "primary": {"usedPercent": 12, "windowDurationMins": 10080, "resetsAt": 1900000000},
+                    "secondary": null
+                }
+            }
+        });
+        let q = parse_rate_limits(&body);
+        assert_eq!(q.len(), 3);
+        let ids: Vec<&str> = q.iter().map(|w| w.limit_id.as_str()).collect();
+        assert!(ids.contains(&"primary"));
+        assert!(ids.contains(&"secondary"));
+        assert!(ids.contains(&"base_model_inference:primary"));
     }
 }
 

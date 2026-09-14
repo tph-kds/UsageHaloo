@@ -4,6 +4,10 @@
  * Speaks `account/rateLimits/read` over the app-server's stdin/stdout and
  * returns quota windows via collectors/providers.mjs normalization.
  *
+ * Handshake: the app-server requires an `initialize` request (id 0,
+ * params.clientInfo) BEFORE `account/rateLimits/read` (id 1); without it
+ * the child closes without emitting windows.
+ *
  * Privacy: never reads auth material from internal files. The child process
  * inherits the user's own login session (same as running Codex yourself).
  * Override for tests: CODEX_APP_SERVER_CMD="node /path/to/fake.mjs".
@@ -54,6 +58,7 @@ export function readCodexRateLimits(timeoutMs = 8000) {
     });
     child.on('close', () => { clearTimeout(timer); finish({ live: false, reason: 'closed_without_windows' }); });
     try {
+      child.stdin.write(JSON.stringify({ method: 'initialize', id: 0, params: { clientInfo: { name: 'usagehalo', version: '0.1.0' } } }) + '\n');
       child.stdin.write(JSON.stringify({ method: 'account/rateLimits/read', id: 1, params: {} }) + '\n');
     } catch { clearTimeout(timer); finish({ live: false, reason: 'stdin_failed' }); }
   });
@@ -104,12 +109,14 @@ export function subscribeCodexRateLimits(onEvent, { timeoutMs = 8000 } = {}) {
         if (!line.startsWith('{')) continue;
         let msg;
         try { msg = JSON.parse(line); } catch { continue; }
+        if (msg.id === 0) continue; // initialize handshake ack, not quota data
         if (msg.method === 'account/rateLimits/updated') emit('updated', msg.params ?? msg.result ?? {});
         else if (msg.id === 1 || msg.result) emit('snapshot', msg.result ?? msg.params ?? {});
       }
     });
     child.on('close', () => { if (!settled) { settled = true; clearTimeout(timer); resolve({ live: false, reason: 'closed_without_windows' }); } });
     try {
+      child.stdin.write(JSON.stringify({ method: 'initialize', id: 0, params: { clientInfo: { name: 'usagehalo', version: '0.1.0' } } }) + '\n');
       child.stdin.write(JSON.stringify({ method: 'account/rateLimits/read', id: 1, params: {} }) + '\n');
     } catch {
       if (!settled) { settled = true; clearTimeout(timer); resolve({ live: false, reason: 'stdin_failed' }); }
