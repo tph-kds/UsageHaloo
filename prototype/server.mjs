@@ -631,6 +631,35 @@ async function codexV2Snapshot(nowMs = Date.now()) {
   } catch { return base('unavailable', [], null); }
 }
 
+// Mirror of connectors/gemini-cli/src/lib.rs GeminiCliAdapter (Phase B4):
+// ~/.gemini holds identity only (active account id), quota semantics belong
+// to the Antigravity product with no verified local source, so the display
+// snapshot is Unsupported with zero windows. OTLP request counts are
+// DERIVED-only and never quota.
+function geminiV2Snapshot(nowMs = Date.now()) {
+  const collected_at = new Date(nowMs).toISOString();
+  const base = (health_state, active_source_id) => ({
+    health_state, account_key: null, headline_metric_id: null,
+    active_source_id, collected_at, observed_at: null, windows: [],
+  });
+  try {
+    const home = os.homedir();
+    const geminiDir = home ? path.join(home, '.gemini') : null;
+    const antigravityDir = home ? path.join(home, '.antigravity') : null;
+    let installed = false;
+    try {
+      if (geminiDir && fs.existsSync(geminiDir)) {
+        installed = fs.existsSync(path.join(geminiDir, 'google_accounts.json'))
+          || fs.existsSync(path.join(geminiDir, 'tmp'))
+          || fs.existsSync(path.join(geminiDir, 'antigravity'));
+      }
+      if (!installed && antigravityDir && fs.existsSync(antigravityDir)) installed = true;
+    } catch { /* fall through to unavailable */ }
+    if (installed) return base('unsupported', 'local-state');
+    return base('unavailable', null);
+  } catch { return base('unavailable', null); }
+}
+
 // Mirror of connectors/cursor/src/lib.rs CursorAdapter (Phase B3): local
 // state carries identity only, so the display snapshot is Unsupported with
 // zero windows. Installed presence is asserted by file existence; token
@@ -844,6 +873,11 @@ async function snapshotWithLive(url) {
   try {
     const e = base.providers.find((p) => p.id === 'cursor');
     if (e) e.v2 = cursorV2Snapshot();
+  } catch { /* v2 overlay is best-effort; base snapshot stands */ }
+  // Additive V2 display snapshot for the Gemini CLI card (Phase B4).
+  try {
+    const e = base.providers.find((p) => p.id === 'gemini-cli');
+    if (e) e.v2 = geminiV2Snapshot();
   } catch { /* v2 overlay is best-effort; base snapshot stands */ }
   base.detected = detected;
   base.live = live;
