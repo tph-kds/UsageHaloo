@@ -5477,6 +5477,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "usage-halo-connector-cursor"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "usage-halo-core",
+]
+
+[[package]]
 name = "usage-halo-connector-gemini-cli"
 version = "0.1.0"
 dependencies = [

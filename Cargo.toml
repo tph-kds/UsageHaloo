@@ -11,6 +11,7 @@ members = [
   "crates/usage-halo-forecast",
   "connectors/claude-code",
   "connectors/codex",
+  "connectors/cursor",
   "connectors/gemini-cli",
   "connectors/openai",
   "connectors/anthropic",
